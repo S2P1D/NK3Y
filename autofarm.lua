@@ -376,9 +376,9 @@ end
 
 -- ===== СОЗДАНИЕ ОКНА =====
 local Window = Rayfield:CreateWindow({
-    Name = "AutoFarm + Counter Tracker",
+    Name = "AutoFarm by NK3Y",
     LoadingTitle = "Загрузка...",
-    LoadingSubtitle = "by NK3Y",
+    LoadingSubtitle = "#grrrrmonday",
     Theme = "Amethyst",
     ConfigurationSaving = { Enabled = false }
 })
