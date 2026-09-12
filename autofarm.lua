@@ -378,7 +378,7 @@ end
 local Window = Rayfield:CreateWindow({
     Name = "AutoFarm + Counter Tracker",
     LoadingTitle = "Загрузка...",
-    LoadingSubtitle = "by DeepSeek",
+    LoadingSubtitle = "by NK3Y",
     Theme = "Amethyst",
     ConfigurationSaving = { Enabled = false }
 })
