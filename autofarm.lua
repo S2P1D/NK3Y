@@ -21,6 +21,10 @@ local Locales = {
         farm_delay = "Время на точке (сек)",
         save_position = "Сохранить текущую позицию",
         clear_points = "Очистить все точки",
+        add_tp = "Добавить TP в рюкзак",
+        add_tp_notify = "TP добавлен в рюкзак",
+        tp_already = "TP уже в рюкзаке",
+        custom_anims = "Кастомные idle/walk анимации",
         tracker_show = "Показать счётчики",
         tracker_transparency = "Прозрачность",
         tracker_pos_x = "Позиция X",
@@ -46,6 +50,8 @@ local Locales = {
         notify_error_save = "Не удалось сохранить: ",
         notify_error_load = "Не удалось загрузить конфиг",
         notify_server_hop = "Поиск сервера...",
+        notify_anims_on = "Анимации включены",
+        notify_anims_off = "Анимации выключены",
         notify_loaded = "Загружен. by NK3Y"
     },
     en = {
@@ -62,6 +68,10 @@ local Locales = {
         farm_delay = "Time per point (sec)",
         save_position = "Save current position",
         clear_points = "Clear all points",
+        add_tp = "Add TP to backpack",
+        add_tp_notify = "TP added to backpack",
+        tp_already = "TP already in backpack",
+        custom_anims = "Custom idle/walk animations",
         tracker_show = "Show counters",
         tracker_transparency = "Transparency",
         tracker_pos_x = "Position X",
@@ -87,6 +97,8 @@ local Locales = {
         notify_error_save = "Failed to save: ",
         notify_error_load = "Failed to load config",
         notify_server_hop = "Searching for server...",
+        notify_anims_on = "Animations enabled",
+        notify_anims_off = "Animations disabled",
         notify_loaded = "Loaded. by NK3Y"
     }
 }
@@ -117,10 +129,195 @@ local trackerPosition = UDim2.new(0, 10, 0, 10)
 local antiAfkActive = false
 local antiAfkThread = nil
 
-local farmToggle, antiAfkToggle, autoRejoinToggle, trackerToggle, trackerTransparencySlider
+local farmToggle, antiAfkToggle, autoRejoinToggle, trackerToggle, trackerTransparencySlider, idleWalkToggle
 local windowRef = nil
 
 local CONFIG_FILE = "DummyCounter_Config.json"
+
+-- ===== TP TOOL =====
+local TELEPORT_DISTANCE = 25
+local TP_COOLDOWN = 3
+local TP_ANIMATION_ID = "131215175083976"
+
+local tpTool = nil
+local tpCanUse = true
+
+local function playTpAnimation(character)
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return end
+    local animator = humanoid:FindFirstChildOfClass("Animator")
+    if not animator then return end
+
+    local anim = Instance.new("Animation")
+    anim.AnimationId = "rbxassetid://" .. TP_ANIMATION_ID
+
+    local ok, track = pcall(function()
+        return animator:LoadAnimation(anim)
+    end)
+    if not (ok and track) then return end
+
+    track:Play()
+
+    local moveConnection
+    moveConnection = game:GetService("RunService").Heartbeat:Connect(function()
+        if humanoid.MoveDirection.Magnitude > 0 then
+            pcall(function() track:Stop() end)
+            if moveConnection then moveConnection:Disconnect() end
+        end
+    end)
+
+    track.Stopped:Connect(function()
+        if moveConnection then
+            moveConnection:Disconnect()
+            moveConnection = nil
+        end
+    end)
+end
+
+local function createTpTool()
+    local player = game.Players.LocalPlayer
+    local backpack = player:WaitForChild("Backpack")
+
+    if backpack:FindFirstChild("TP") then
+        Rayfield:Notify({Title = T("add_tp"), Content = T("tp_already"), Duration = 3})
+        return
+    end
+
+    local tool = Instance.new("Tool")
+    tool.Name = "TP"
+    tool.RequiresHandle = false
+    tool.CanBeDropped = false
+    tool.Parent = backpack
+
+    tool.Activated:Connect(function()
+        if not tpCanUse then return end
+        local character = player.Character
+        if not character then return end
+        local rootPart = character:FindFirstChild("HumanoidRootPart")
+        if not rootPart then return end
+
+        tpCanUse = false
+
+        playTpAnimation(character)
+
+        task.wait(0.3)
+
+        local currentCFrame = rootPart.CFrame
+        local direction = currentCFrame.LookVector
+        local newPosition = currentCFrame.Position + (direction * TELEPORT_DISTANCE)
+
+        pcall(function()
+            rootPart.CFrame = CFrame.new(newPosition, newPosition + direction)
+        end)
+
+        task.wait(TP_COOLDOWN)
+        tpCanUse = true
+    end)
+
+    tpTool = tool
+    Rayfield:Notify({Title = T("add_tp"), Content = T("add_tp_notify"), Duration = 3})
+end
+
+-- ===== CUSTOM IDLE/WALK =====
+local CUSTOM_IDLE_ID = "108178753125968"
+local CUSTOM_WALK_ID = "83287939773169"
+
+local customAnimsActive = false
+local customAnimsThread = nil
+local currentIdleTrack = nil
+local currentWalkTrack = nil
+
+local function stopCustomAnims()
+    customAnimsActive = false
+    if customAnimsThread then
+        task.cancel(customAnimsThread)
+        customAnimsThread = nil
+    end
+    if currentIdleTrack then
+        pcall(function() currentIdleTrack:Stop() end)
+        currentIdleTrack = nil
+    end
+    if currentWalkTrack then
+        pcall(function() currentWalkTrack:Stop() end)
+        currentWalkTrack = nil
+    end
+end
+
+local function startCustomAnims()
+    if customAnimsActive then return end
+    customAnimsActive = true
+
+    customAnimsThread = task.spawn(function()
+        while customAnimsActive do
+            local char = game.Players.LocalPlayer.Character
+            if char then
+                local humanoid = char:FindFirstChildOfClass("Humanoid")
+                local animator = humanoid and humanoid:FindFirstChildOfClass("Animator")
+
+                if humanoid and animator and humanoid.Health > 0 then
+                    local state = humanoid:GetState()
+                    local isMoving = humanoid.MoveDirection.Magnitude > 0.1
+                    local isAirborne = (state == Enum.HumanoidStateType.Freefall
+                                        or state == Enum.HumanoidStateType.Jumping
+                                        or state == Enum.HumanoidStateType.Landed)
+
+                    -- Глушим стандартные idle/walk/run
+                    for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+                        if track.Animation then
+                            local name = track.Animation.Name or ""
+                            local id = track.Animation.AnimationId or ""
+                            if id ~= "rbxassetid://" .. CUSTOM_IDLE_ID
+                               and id ~= "rbxassetid://" .. CUSTOM_WALK_ID then
+                                if name == "Idle" or name == "Walk"
+                                   or name == "Run" or name == "Animation1"
+                                   or name == "WalkAnim" or name == "Animation2" then
+                                    pcall(function() track:Stop() end)
+                                end
+                            end
+                        end
+                    end
+
+                    if not isAirborne then
+                        if isMoving then
+                            if currentIdleTrack then
+                                pcall(function() currentIdleTrack:Stop() end)
+                                currentIdleTrack = nil
+                            end
+                            if not currentWalkTrack then
+                                local anim = Instance.new("Animation")
+                                anim.AnimationId = "rbxassetid://" .. CUSTOM_WALK_ID
+                                local ok, track = pcall(function()
+                                    return animator:LoadAnimation(anim)
+                                end)
+                                if ok and track then
+                                    currentWalkTrack = track
+                                    currentWalkTrack:Play()
+                                end
+                            end
+                        else
+                            if currentWalkTrack then
+                                pcall(function() currentWalkTrack:Stop() end)
+                                currentWalkTrack = nil
+                            end
+                            if not currentIdleTrack then
+                                local anim = Instance.new("Animation")
+                                anim.AnimationId = "rbxassetid://" .. CUSTOM_IDLE_ID
+                                local ok, track = pcall(function()
+                                    return animator:LoadAnimation(anim)
+                                end)
+                                if ok and track then
+                                    currentIdleTrack = track
+                                    currentIdleTrack:Play()
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+            task.wait(0.1)
+        end
+    end)
+end
 
 -- ===== ФАРМ =====
 local function startFarm()
@@ -327,6 +524,7 @@ local function saveConfig()
         trackerTransparency = trackerTransparency,
         trackerPosition = { x = trackerPosition.X.Offset, y = trackerPosition.Y.Offset },
         antiAfkActive = antiAfkActive,
+        customAnimsActive = customAnimsActive,
         language = currentLang
     }
     for _, point in ipairs(teleportPoints) do
@@ -388,6 +586,10 @@ local function loadConfig()
     if antiAfkToggle then antiAfkToggle:Set(shouldAntiAfk) end
     if shouldAntiAfk then startAntiAfk() else stopAntiAfk() end
 
+    local shouldCustomAnims = data.customAnimsActive == true
+    if idleWalkToggle then idleWalkToggle:Set(shouldCustomAnims) end
+    if shouldCustomAnims then startCustomAnims() else stopCustomAnims() end
+
     if autoRejoinToggle then autoRejoinToggle:Set(autoReconnect) end
     if trackerToggle then trackerToggle:Set(trackerVisible) end
     if trackerTransparencySlider then trackerTransparencySlider:Set(trackerTransparency) end
@@ -410,7 +612,8 @@ local function saveStateForTeleport()
         trackerVisible = trackerVisible,
         trackerTransparency = trackerTransparency,
         trackerPosition = {x = trackerPosition.X.Offset, y = trackerPosition.Y.Offset},
-        antiAfkActive = antiAfkActive
+        antiAfkActive = antiAfkActive,
+        customAnimsActive = customAnimsActive
     }
     for _, point in ipairs(teleportPoints) do
         table.insert(data.teleportPoints, {
@@ -550,6 +753,13 @@ PointsTab:CreateButton({
     end
 })
 
+PointsTab:CreateButton({
+    Name = T("add_tp"),
+    Callback = function()
+        createTpTool()
+    end
+})
+
 -- ===== ВКЛАДКА СЧЁТЧИКИ =====
 trackerToggle = TrackerTab:CreateToggle({
     Name = T("tracker_show"),
@@ -654,6 +864,20 @@ antiAfkToggle = SettingsTab:CreateToggle({
     end
 })
 
+idleWalkToggle = SettingsTab:CreateToggle({
+    Name = T("custom_anims"),
+    CurrentValue = false,
+    Callback = function(value)
+        if value then
+            startCustomAnims()
+            Rayfield:Notify({Title = T("custom_anims"), Content = T("notify_anims_on"), Duration = 3})
+        else
+            stopCustomAnims()
+            Rayfield:Notify({Title = T("custom_anims"), Content = T("notify_anims_off"), Duration = 3})
+        end
+    end
+})
+
 SettingsTab:CreateDropdown({
     Name = T("language"),
     Options = {"Русский", "English"},
@@ -666,7 +890,7 @@ SettingsTab:CreateDropdown({
         end
         Rayfield:Notify({
             Title = T("language"),
-            Content = (currentLang == "ru") and "Язык изменён. Перезапустите скрипт для полного применения." or "Language changed. Restart the script to apply fully.",
+            Content = (currentLang == "ru") and "Язык изменён. Перезапустите скрипт." or "Language changed. Restart the script.",
             Duration = 5
         })
     end
@@ -683,6 +907,11 @@ game.Players.LocalPlayer.CharacterAdded:Connect(function()
     task.wait(3)
     if autoReconnect and isFarming then
         startFarm()
+    end
+    if customAnimsActive then
+        stopCustomAnims()
+        task.wait(0.3)
+        startCustomAnims()
     end
 end)
 
