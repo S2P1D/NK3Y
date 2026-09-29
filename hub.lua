@@ -4,6 +4,8 @@
 
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 
 -- ============================================================
 -- ССЫЛКИ
@@ -24,10 +26,62 @@ local SCRIPTS = {
 }
 
 -- ============================================================
+-- ФИКС МАСШТАБА RAYFIELD (для мобилок)
+-- ============================================================
+-- Автоматически подгоняет размер меню под разрешение экрана.
+-- Работает на iOS/Android/ПК.
+
+local function applyScaleFix(scale)
+    -- scale: 1.0 = оригинал, 0.85 = меньше, 1.15 = больше
+    local pg = Players.LocalPlayer:WaitForChild("PlayerGui")
+    local function tryFix()
+        for _, gui in ipairs(pg:GetChildren()) do
+            -- Rayfield создаёт ScreenGui с именем содержащим "Rayfield" или "rayfield"
+            local n = string.lower(gui.Name)
+            if gui:IsA("ScreenGui") and (n:find("rayfield") or n:find("ray_")) then
+                local us = gui:FindFirstChildOfClass("UIScale")
+                if not us then
+                    us = Instance.new("UIScale")
+                    us.Parent = gui
+                end
+                us.Scale = scale
+                return true
+            end
+        end
+        return false
+    end
+    -- Пытаемся несколько раз, т.к. GUI создаётся асинхронно
+    task.spawn(function()
+        for i = 1, 40 do
+            if tryFix() then break end
+            task.wait(0.25)
+        end
+    end)
+end
+
+-- Определяем оптимальный масштаб под экран
+local function getOptimalScale()
+    local cam = workspace.CurrentCamera
+    if not cam then return 0.85 end
+    local vp = cam.ViewportSize
+    local w, h = vp.X, vp.Y
+    
+    -- Если экран маленький (< 800px) — уменьшаем
+    if w < 800 then
+        return 0.7
+    elseif w < 1000 then
+        return 0.8
+    elseif w < 1300 then
+        return 0.85
+    else
+        return 1.0
+    end
+end
+
+-- ============================================================
 -- OWNER KEY HASH (djb2)
 -- ============================================================
--- Твой ключ: NK3Y_OWNER_2026
-local OWNER_HASH = 1574169149
+local OWNER_HASH = 1574169149 -- NK3Y_OWNER_2026
 
 local function djb2(str)
     local h = 5381
@@ -106,7 +160,7 @@ local function showKeyScreen(callback)
     keyGui.ResetOnSpawn = false
     keyGui.IgnoreGuiInset = true
     keyGui.DisplayOrder = 999
-    keyGui.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
+    keyGui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
 
     local bg = Instance.new("Frame")
     bg.Size = UDim2.new(1, 0, 1, 0)
@@ -187,6 +241,14 @@ local function showKeyScreen(callback)
     btn.Font = Enum.Font.Code
     btn.Parent = frame
 
+    -- Авто-масштаб для экрана ключа
+    local keyScale = getOptimalScale()
+    if keyScale < 1 then
+        local us = Instance.new("UIScale")
+        us.Scale = math.max(0.6, keyScale)
+        us.Parent = keyGui
+    end
+
     local checking = false
 
     btn.MouseButton1Click:Connect(function()
@@ -264,6 +326,9 @@ local function showHubMenu(userKey, userData)
         ConfigurationSaving = { Enabled = false }
     })
 
+    -- Применяем фикс масштаба сразу после создания окна
+    applyScaleFix(getOptimalScale())
+
     local MainTab = Window:CreateTab("Скрипты", 4483362458)
     local InfoTab = Window:CreateTab("Инфо", nil)
 
@@ -299,7 +364,7 @@ local function showHubMenu(userKey, userData)
 
     InfoTab:CreateParagraph({
         Title = "NK3Y HUB",
-        Content = "Версия: 2.0\nАвтор: NK3Y\nСтатус: " .. (isOwner and "OWNER" or "USER") .. "\nКлюч: " .. string.sub(userKey, 1, 4) .. "***"
+        Content = "Версия: 2.1\nАвтор: NK3Y\nСтатус: " .. (isOwner and "OWNER" or "USER") .. "\nКлюч: " .. string.sub(userKey, 1, 4) .. "***"
     })
 
     InfoTab:CreateButton({
