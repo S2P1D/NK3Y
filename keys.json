@@ -1,14 +1,36 @@
-{
-  "user_keys": [
-    {"key": "NK3Y_USER_001", "expires": null},
-    {"key": "NK3Y_USER_002", "expires": null},
-    {"key": "NK3Y_USER_003", "expires": null},
-    {"key": "NK3Y_USER_004", "expires": null},
-    {"key": "NK3Y_USER_005", "expires": null},
-    {"key": "NK3Y_USER_006", "expires": null},
-    {"key": "NK3Y_USER_007", "expires": null},
-    {"key": "NK3Y_USER_008", "expires": null},
-    {"key": "NK3Y_USER_009", "expires": null},
-    {"key": "NK3Y_USER_010", "expires": null}
-  ]
-}
+local function checkRemoteKey(key)
+    -- 1. Получаем HWID (UserID — самый простой вариант)
+    local hwid = tostring(game:GetService("Players").LocalPlayer.UserId)
+    
+    -- 2. Твой идентификатор сервиса (выдаётся при регистрации в Pandauth)
+    local service = "твой_сервис_идент" -- Замени на свой!
+    
+    -- 3. Формируем URL для проверки (как в документации Panda Development)
+    local url = "https://pandadevelopment.net/v2_validation?service=" .. service .. "&hwid=" .. hwid .. "&key=" .. key
+    
+    -- 4. Отправляем запрос
+    local success, response = pcall(function()
+        return game:HttpGet(url, true)
+    end)
+    
+    if not success or not response then
+        return false, "Ошибка соединения с сервером ключей"
+    end
+    
+    -- 5. Парсим ответ (структура из документации: data.V2_Authentication)
+    local ok, data = pcall(function()
+        return game:GetService("HttpService"):JSONDecode(response)
+    end)
+    
+    if not ok or not data then
+        return false, "Неверный ответ от сервера"
+    end
+    
+    -- 6. Проверяем результат (V2_Authentication = true означает успех)
+    if data.V2_Authentication == true then
+        return true, "OK"
+    else
+        -- Можно также проверить data.Key_Information.Premium_Mode, если нужно
+        return false, data.message or "Ключ недействителен"
+    end
+end
