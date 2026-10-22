@@ -82,7 +82,7 @@ end
 
 local function checkRemoteKey(key)
     local hwid = tostring(Players.LocalPlayer.UserId)
-    local service = "nk3yhub"
+    local service = "nk3yhub" -- Твой Identifier
     local url = "https://pandadevelopment.net/v2_validation?service=" .. service .. "&hwid=" .. hwid .. "&key=" .. key
     
     local success, response = pcall(function() return game:HttpGet(url, true) end)
@@ -357,7 +357,6 @@ local function showHubMenu(userKey, userData)
 
     local MainTab = Window:CreateTab("Скрипты", 4483362458)
     local SoundTab = Window:CreateTab("Звуки", 4483362458)
-    -- Иконка изменена с nil на число, чтобы вкладка не была пустой
     local InfoTab = Window:CreateTab("Ключ / Инфо", 4483362458)
 
     -- ===== СКРИПТЫ =====
@@ -392,22 +391,32 @@ local function showHubMenu(userKey, userData)
     SoundTab:CreateInput({Name = "ID звука прыжка", CurrentValue = KB_DEFAULT_JUMP, Callback = function(t) KB.jumpSound = t end})
     SoundTab:CreateInput({Name = "ID звука приземления", CurrentValue = KB_DEFAULT_LAND, Callback = function(t) KB.landSound = t end})
 
-    -- ===== ИНФО И КЛЮЧ (Исправленная версия) =====
+    -- ===== ИНФО И КЛЮЧ (Пуленепробиваемый вариант) =====
     InfoTab:CreateSection("Информация")
     
-    local statusText = isOwner and "Владелец (Бессрочно)" or "Пользователь"
-    InfoTab:CreateParagraph({
-        Title = "Твой статус:",
-        Content = statusText .. "\nТвой ключ: " .. string.sub(userKey, 1, 8) .. "***"
+    -- Безопасное получение первых символов ключа
+    local safeKey = tostring(userKey or "Unknown")
+    local displayKey = string.sub(safeKey, 1, 8) .. "***"
+    local role = isOwner and "Владелец (Бессрочно)" or "Пользователь"
+
+    -- Используем кнопки для отображения текста (они не глючат)
+    InfoTab:CreateButton({
+        Name = "Твой статус: " .. role,
+        Callback = function() end
     })
 
     InfoTab:CreateButton({
-        Name = "Получить инфо о ключе (Время / HWID)",
+        Name = "Твой ключ: " .. displayKey,
+        Callback = function() end
+    })
+
+    InfoTab:CreateButton({
+        Name = "Узнать время и HWID ключа",
         Callback = function()
             Rayfield:Notify({Title = "Запрос", Content = "Ждём ответа от Pandauth...", Duration = 2})
             task.spawn(function()
                 local info = fetchKeyInfo(userKey)
-                print("[NK3Y HUB] Инфо о ключе: \n" .. info) -- Вывод в консоль (F9)
+                print("[NK3Y HUB] Инфо о ключе: \n" .. info)
                 
                 local lines = {}
                 for line in info:gmatch("[^\r\n]+") do
@@ -427,9 +436,9 @@ local function showHubMenu(userKey, userData)
         Callback = function()
             if setclipboard then
                 setclipboard(userKey)
-                Rayfield:Notify({Title = "Успех", Content = "Ключ скопирован в буфер обмена", Duration = 3})
+                Rayfield:Notify({Title = "Успех", Content = "Ключ скопирован", Duration = 3})
             else
-                Rayfield:Notify({Title = "Ошибка", Content = "Твой экзекьютор не поддерживает копирование", Duration = 3})
+                Rayfield:Notify({Title = "Ошибка", Content = "Экзекьютор не поддерживает копирование", Duration = 3})
             end
         end
     })
@@ -439,7 +448,7 @@ local function showHubMenu(userKey, userData)
         Callback = function()
             if delfile and isfile(KEY_FILE) then
                 pcall(function() delfile(KEY_FILE) end)
-                Rayfield:Notify({Title = "Сброс", Content = "Ключ удален. Перезапусти скрипт для ввода нового.", Duration = 5})
+                Rayfield:Notify({Title = "Сброс", Content = "Ключ удален. Перезапусти скрипт.", Duration = 5})
             end
         end
     })
