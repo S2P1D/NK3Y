@@ -1,5 +1,5 @@
 -- ============================================================
--- NK3Y HUB - Pandauth + Key Info + Auto-Execute (Fixed UI)
+-- NK3Y HUB - Pandauth (vss) + Key Info + Auto-Execute
 -- ============================================================
 
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
@@ -60,7 +60,7 @@ local function getOptimalScale()
 end
 
 -- ============================================================
--- СИСТЕМА КЛЮЧЕЙ (Pandauth)
+-- СИСТЕМА КЛЮЧЕЙ (Pandauth через vss)
 -- ============================================================
 local OWNER_HASH = 1574169149 -- NK3Y_OWNER_2026
 
@@ -75,7 +75,9 @@ end
 local function checkRemoteKey(key)
     local hwid = tostring(Players.LocalPlayer.UserId)
     local service = "nk3yhub"
-    local url = "https://pandadevelopment.net/v2_validation?service=" .. service .. "&hwid=" .. hwid .. "&key=" .. key
+    
+    -- ИСПОЛЬЗУЕМ vss.pandauth.com ВМЕСТО pandadevelopment.net
+    local url = "https://vss.pandauth.com/v2_validation?service=" .. service .. "&hwid=" .. hwid .. "&key=" .. key
     
     local success, response = pcall(function() return game:HttpGet(url, true) end)
     if not success or not response then return false, "Ошибка соединения" end
@@ -103,7 +105,9 @@ local function fetchKeyInfo(key)
 
     local hwid = tostring(Players.LocalPlayer.UserId)
     local service = "nk3yhub"
-    local url = "https://pandadevelopment.net/v2_keyinfo?service=" .. service .. "&hwid=" .. hwid .. "&key=" .. key
+    
+    -- ТУТ ТОЖЕ МЕНЯЕМ ДОМЕН ДЛЯ ИНФО
+    local url = "https://vss.pandauth.com/v2_keyinfo?service=" .. service .. "&hwid=" .. hwid .. "&key=" .. key
     
     local success, response = pcall(function() return game:HttpGet(url, true) end)
     if not success or not response then return "Ошибка соединения с сервером." end
@@ -144,12 +148,14 @@ local autoExecEnabled = true
 local function checkAutoExecute()
     if not autoExecEnabled then return end
     local currentId = game.PlaceId
+    local currentKey = getgenv().NK3Y_Key or loadSavedKey()
+    
     if currentId == PLACES.DCYF then
         Rayfield:Notify({Title = "Auto-Load", Content = "Обнаружен DCYF! Запуск...", Duration = 3})
-        task.wait(1); loadstring(game:HttpGet(SCRIPTS.dcyf.url))()
+        task.wait(1); getgenv().NK3Y_Key = currentKey; loadstring(game:HttpGet(SCRIPTS.dcyf.url))()
     elseif PLACES.Bahkruums ~= 0 and currentId == PLACES.Bahkruums then
         Rayfield:Notify({Title = "Auto-Load", Content = "Обнаружен Bahkruums! Запуск...", Duration = 3})
-        task.wait(1); loadstring(game:HttpGet(SCRIPTS.bahkruums.url))()
+        task.wait(1); getgenv().NK3Y_Key = currentKey; loadstring(game:HttpGet(SCRIPTS.bahkruums.url))()
     end
 end
 
@@ -306,7 +312,6 @@ local function showHubMenu(userKey, userData)
     local Window = Rayfield:CreateWindow({
         Name = "NK3Y HUB" .. (isOwner and " | OWNER" or ""),
         LoadingTitle = "Загрузка...", LoadingSubtitle = "by NK3Y",
-        -- ВОЗВРАЩЕНА ПОЛНАЯ ТЕМА (чтобы не было ошибок Color3)
         Theme = {
             TextColor = Color3.fromRGB(0, 255, 100), Background = Color3.fromRGB(0, 0, 0), Topbar = Color3.fromRGB(5, 5, 5),
             Shadow = Color3.fromRGB(0, 10, 0), NotificationBackground = Color3.fromRGB(0, 20, 5), NotificationActionsBackground = Color3.fromRGB(0, 40, 15),
@@ -333,49 +338,37 @@ local function showHubMenu(userKey, userData)
     MainTab:CreateSection("DCYF")
     MainTab:CreateButton({Name = "Загрузить " .. SCRIPTS.dcyf.name, Callback = function()
         Rayfield:Notify({Title = "Загрузка", Content = SCRIPTS.dcyf.name, Duration = 3})
-        task.spawn(function() pcall(function() loadstring(game:HttpGet(SCRIPTS.dcyf.url))() end); createBoomboxTab(Window) end)
+        task.spawn(function() getgenv().NK3Y_Key = userKey; pcall(function() loadstring(game:HttpGet(SCRIPTS.dcyf.url))() end); createBoomboxTab(Window) end)
     end})
 
     MainTab:CreateSection("Bahkruums")
     MainTab:CreateButton({Name = "Загрузить " .. SCRIPTS.bahkruums.name, Callback = function()
         Rayfield:Notify({Title = "Загрузка", Content = SCRIPTS.bahkruums.name, Duration = 3})
-        task.spawn(function() pcall(function() loadstring(game:HttpGet(SCRIPTS.bahkruums.url))() end); createBoomboxTab(Window) end)
+        task.spawn(function() getgenv().NK3Y_Key = userKey; pcall(function() loadstring(game:HttpGet(SCRIPTS.bahkruums.url))() end); createBoomboxTab(Window) end)
     end})
 
     -- ===== АВТО-ЗАПУСК =====
     MainTab:CreateSection("Авто-запуск")
-    MainTab:CreateToggle({
-        Name = "Авто-запуск по плейсу",
-        CurrentValue = autoExecEnabled,
-        Callback = function(val) autoExecEnabled = val; if val then checkAutoExecute() end end
-    })
+    MainTab:CreateToggle({Name = "Авто-запуск по плейсу", CurrentValue = autoExecEnabled, Callback = function(val) autoExecEnabled = val; if val then checkAutoExecute() end end})
 
-    -- ===== ЗВУКИ (ДОБАВЛЕН PlaceholderText ВО ВСЕ ИНПУТЫ) =====
+    -- ===== ЗВУКИ =====
     SoundTab:CreateSection("Клавиатура")
     SoundTab:CreateToggle({Name = "Включить звуки", CurrentValue = false, Callback = function(v) if v then startKeyboardSounds() else stopKeyboardSounds() end end})
     SoundTab:CreateSlider({Name = "Громкость", Range = {0, 100}, CurrentValue = 40, Callback = function(v) KB.volume = v / 100 end})
-    
     SoundTab:CreateInput({Name = "ID звука ходьбы", CurrentValue = KB_DEFAULT_WALK, PlaceholderText = "rbxassetid://...", RemoveTextAfterFocusLost = false, Callback = function(t) KB.walkSound = t end})
     SoundTab:CreateInput({Name = "ID звука прыжка", CurrentValue = KB_DEFAULT_JUMP, PlaceholderText = "rbxassetid://...", RemoveTextAfterFocusLost = false, Callback = function(t) KB.jumpSound = t end})
     SoundTab:CreateInput({Name = "ID звука приземления", CurrentValue = KB_DEFAULT_LAND, PlaceholderText = "rbxassetid://...", RemoveTextAfterFocusLost = false, Callback = function(t) KB.landSound = t end})
 
     -- ===== ИНФО И КЛЮЧ =====
     InfoTab:CreateSection("Информация")
-    
-    local safeKey = tostring(userKey or "Unknown")
-    local displayKey = string.sub(safeKey, 1, 8) .. "***"
-    local role = isOwner and "Владелец (Бессрочно)" or "Пользователь"
-
-    InfoTab:CreateButton({Name = "Твой статус: " .. role, Callback = function() end})
-    InfoTab:CreateButton({Name = "Твой ключ: " .. displayKey, Callback = function() end})
-
+    InfoTab:CreateButton({Name = "Твой статус: " .. (isOwner and "Владелец" or "Пользователь"), Callback = function() end})
+    InfoTab:CreateButton({Name = "Твой ключ: " .. string.sub(tostring(userKey), 1, 8) .. "***", Callback = function() end})
     InfoTab:CreateButton({
         Name = "Узнать время и HWID ключа",
         Callback = function()
             Rayfield:Notify({Title = "Запрос", Content = "Ждём ответа от Pandauth...", Duration = 2})
             task.spawn(function()
                 local info = fetchKeyInfo(userKey)
-                print("[NK3Y HUB] Инфо о ключе: \n" .. info)
                 local lines = {}
                 for line in info:gmatch("[^\r\n]+") do table.insert(lines, line) end
                 for i, line in ipairs(lines) do
@@ -385,24 +378,8 @@ local function showHubMenu(userKey, userData)
             end)
         end
     })
-
-    InfoTab:CreateButton({
-        Name = "Скопировать мой ключ",
-        Callback = function()
-            if setclipboard then setclipboard(userKey); Rayfield:Notify({Title = "Успех", Content = "Ключ скопирован", Duration = 3})
-            else Rayfield:Notify({Title = "Ошибка", Content = "Экзекьютор не поддерживает копирование", Duration = 3}) end
-        end
-    })
-
-    InfoTab:CreateButton({
-        Name = "Сбросить ключ (Выйти)",
-        Callback = function()
-            if delfile and isfile(KEY_FILE) then
-                pcall(function() delfile(KEY_FILE) end)
-                Rayfield:Notify({Title = "Сброс", Content = "Ключ удален. Перезапусти скрипт.", Duration = 5})
-            end
-        end
-    })
+    InfoTab:CreateButton({Name = "Скопировать мой ключ", Callback = function() if setclipboard then setclipboard(userKey); Rayfield:Notify({Title = "Успех", Content = "Скопировано", Duration = 3}) end end})
+    InfoTab:CreateButton({Name = "Сбросить ключ", Callback = function() if delfile and isfile(KEY_FILE) then pcall(function() delfile(KEY_FILE) end); Rayfield:Notify({Title = "Сброс", Content = "Ключ удален", Duration = 5}) end end})
 
     if autoExecEnabled then checkAutoExecute() end
 end
