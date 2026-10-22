@@ -1,5 +1,5 @@
 -- ============================================================
--- NK3Y HUB - Pandauth + Key Info + Auto-Execute
+-- NK3Y HUB - Pandauth + Key Info + Auto-Execute (Fixed UI)
 -- ============================================================
 
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
@@ -9,7 +9,7 @@ local RunService = game:GetService("RunService")
 local SoundService = game:GetService("SoundService")
 
 -- ============================================================
--- НАСТРОЙКИ ПЛЕЙСОВ (Для авто-запуска)
+-- НАСТРОЙКИ ПЛЕЙСОВ
 -- ============================================================
 local PLACES = {
     DCYF = 128662368175518,
@@ -20,16 +20,8 @@ local PLACES = {
 -- ССЫЛКИ НА СКРИПТЫ
 -- ============================================================
 local SCRIPTS = {
-    dcyf = {
-        name = "DCYF Autofarm",
-        url = "https://raw.githubusercontent.com/S2P1D/NK3Y/main/autofarm.lua",
-        description = "Silent AKA NK3Y Autofarm v3.0"
-    },
-    bahkruums = {
-        name = "Bahkruums Farm",
-        url = "https://raw.githubusercontent.com/S2P1D/NK3Y/main/bahkruums.lua",
-        description = "NK3Y Bahkruums Auto-farm + Auto-TP"
-    }
+    dcyf = { name = "DCYF Autofarm", url = "https://raw.githubusercontent.com/S2P1D/NK3Y/main/autofarm.lua" },
+    bahkruums = { name = "Bahkruums Farm", url = "https://raw.githubusercontent.com/S2P1D/NK3Y/main/bahkruums.lua" }
 }
 
 -- ============================================================
@@ -82,7 +74,7 @@ end
 
 local function checkRemoteKey(key)
     local hwid = tostring(Players.LocalPlayer.UserId)
-    local service = "nk3yhub" -- Твой Identifier
+    local service = "nk3yhub"
     local url = "https://pandadevelopment.net/v2_validation?service=" .. service .. "&hwid=" .. hwid .. "&key=" .. key
     
     local success, response = pcall(function() return game:HttpGet(url, true) end)
@@ -106,11 +98,8 @@ local function validateKey(key)
     return false, msg or "Неверный ключ", nil
 end
 
--- Получение инфо о ключе (Pandauth API)
 local function fetchKeyInfo(key)
-    if djb2(key) == OWNER_HASH then 
-        return "Бессрочный (Владелец)\nЛимит HWID: Безлимит" 
-    end
+    if djb2(key) == OWNER_HASH then return "Бессрочный (Владелец)\nЛимит HWID: Безлимит" end
 
     local hwid = tostring(Players.LocalPlayer.UserId)
     local service = "nk3yhub"
@@ -120,7 +109,7 @@ local function fetchKeyInfo(key)
     if not success or not response then return "Ошибка соединения с сервером." end
     
     local ok, data = pcall(function() return HttpService:JSONDecode(response) end)
-    if not ok or not data or not data.Key_Information then return "Неверный формат данных от Pandauth." end
+    if not ok or not data or not data.Key_Information then return "Неверный формат данных." end
     
     local info = data.Key_Information
     local exp = info.Days_Left and (info.Days_Left .. " дн.") or (info.Expires and os.date("%d.%m.%Y", info.Expires) or "Бессрочный")
@@ -148,22 +137,19 @@ local function saveKey(key)
 end
 
 -- ============================================================
--- АВТО-ЗАПУСК (Auto-Execute)
+-- АВТО-ЗАПУСК
 -- ============================================================
 local autoExecEnabled = true
 
 local function checkAutoExecute()
     if not autoExecEnabled then return end
     local currentId = game.PlaceId
-    
     if currentId == PLACES.DCYF then
         Rayfield:Notify({Title = "Auto-Load", Content = "Обнаружен DCYF! Запуск...", Duration = 3})
-        task.wait(1)
-        loadstring(game:HttpGet(SCRIPTS.dcyf.url))()
+        task.wait(1); loadstring(game:HttpGet(SCRIPTS.dcyf.url))()
     elseif PLACES.Bahkruums ~= 0 and currentId == PLACES.Bahkruums then
         Rayfield:Notify({Title = "Auto-Load", Content = "Обнаружен Bahkruums! Запуск...", Duration = 3})
-        task.wait(1)
-        loadstring(game:HttpGet(SCRIPTS.bahkruums.url))()
+        task.wait(1); loadstring(game:HttpGet(SCRIPTS.bahkruums.url))()
     end
 end
 
@@ -178,9 +164,7 @@ local KB_DEFAULT_LAND = "rbxassetid://7494098965"
 local function playKbSound(id)
     if not id then return end
     local s = Instance.new("Sound", SoundService)
-    s.SoundId = id
-    s.Volume = KB.volume
-    s:Play()
+    s.SoundId = id; s.Volume = KB.volume; s:Play()
     s.Ended:Connect(function() s:Destroy() end)
 end
 
@@ -198,8 +182,7 @@ local function startKeyboardSounds()
                 local char = Players.LocalPlayer.Character
                 local hum = char and char:FindFirstChildOfClass("Humanoid")
                 if hum and hum.MoveDirection.Magnitude > 0.1 and hum.FloorMaterial ~= Enum.Material.Air and (tick() - KB.lastWalk) >= KB.walkInterval then
-                    KB.lastWalk = tick()
-                    playKbSound(KB.walkSound)
+                    KB.lastWalk = tick(); playKbSound(KB.walkSound)
                 end
             end
         end
@@ -212,7 +195,6 @@ local function startKeyboardSounds()
             elseif newState == Enum.HumanoidStateType.Landed and KB.landEnabled then playKbSound(KB.landSound) end
         end))
     end
-
     local function hookChar(char)
         local hum = char:WaitForChild("Humanoid", 5)
         if hum then hookHumanoid(hum) end
@@ -229,7 +211,6 @@ local function stopKeyboardSounds()
 end
 
 local Boombox = { sound = nil, volume = 0.5, loop = false }
-
 local function normalizeTrackId(text)
     if not text then return nil end
     text = text:gsub("%s+", "")
@@ -243,26 +224,13 @@ end
 local function tryPlayBoombox(idText)
     local id = normalizeTrackId(idText)
     if not id then return false, "неверный ID" end
-    if not Boombox.sound then
-        Boombox.sound = Instance.new("Sound", SoundService)
-    end
+    if not Boombox.sound then Boombox.sound = Instance.new("Sound", SoundService) end
     local s = Boombox.sound
-    s:Stop()
-    s.SoundId = id
-    s.Volume = Boombox.volume
-    s.Looped = Boombox.loop
+    s:Stop(); s.SoundId = id; s.Volume = Boombox.volume; s.Looped = Boombox.loop
     pcall(function() game:GetService("ContentProvider"):PreloadAsync({s}) end)
-
     local waited = 0
     while waited < 3 and not (s.IsLoaded and s.TimeLength > 0) do task.wait(0.1); waited = waited + 0.1 end
-    
-    if s.IsLoaded and s.TimeLength > 0 then
-        s:Play()
-        return true, "успешно загружен!"
-    else
-        s:Stop(); s.SoundId = ""
-        return false, "трек заблокирован/удалён"
-    end
+    if s.IsLoaded and s.TimeLength > 0 then s:Play(); return true, "успешно!" else s:Stop(); s.SoundId = ""; return false, "заблокирован/удалён" end
 end
 
 local function createBoomboxTab(Window)
@@ -272,10 +240,7 @@ local function createBoomboxTab(Window)
     BTab:CreateButton({Name = "▶ Воспроизвести", Callback = function()
         if not trackInput then return end
         Rayfield:Notify({Title = "Бумбокс", Content = "Загрузка...", Duration = 2})
-        task.spawn(function()
-            local ok, msg = tryPlayBoombox(trackInput)
-            Rayfield:Notify({Title = "Бумбокс", Content = (ok and "✓ " or "✗ ") .. msg, Duration = 4})
-        end)
+        task.spawn(function() local ok, msg = tryPlayBoombox(trackInput); Rayfield:Notify({Title = "Бумбокс", Content = (ok and "✓ " or "✗ ") .. msg, Duration = 4}) end)
     end})
     BTab:CreateButton({Name = "⏹ Стоп", Callback = function() if Boombox.sound then Boombox.sound:Stop() end end})
     BTab:CreateSlider({Name = "Громкость", Range = {0, 100}, Increment = 5, CurrentValue = 50, Callback = function(v) Boombox.volume = v / 100; if Boombox.sound then Boombox.sound.Volume = Boombox.volume end end})
@@ -324,11 +289,9 @@ local function showKeyScreen(callback)
             local ok, msg, data = validateKey(key)
             if ok then
                 status.TextColor3, status.Text = Color3.fromRGB(0, 255, 100), "ключ принят..."
-                saveKey(key); task.wait(0.5)
-                keyGui:Destroy(); callback(key, data)
+                saveKey(key); task.wait(0.5); keyGui:Destroy(); callback(key, data)
             else
-                status.TextColor3, status.Text = Color3.fromRGB(255, 80, 80), msg
-                checking = false
+                status.TextColor3, status.Text = Color3.fromRGB(255, 80, 80), msg; checking = false
             end
         end)
     end)
@@ -343,12 +306,19 @@ local function showHubMenu(userKey, userData)
     local Window = Rayfield:CreateWindow({
         Name = "NK3Y HUB" .. (isOwner and " | OWNER" or ""),
         LoadingTitle = "Загрузка...", LoadingSubtitle = "by NK3Y",
+        -- ВОЗВРАЩЕНА ПОЛНАЯ ТЕМА (чтобы не было ошибок Color3)
         Theme = {
             TextColor = Color3.fromRGB(0, 255, 100), Background = Color3.fromRGB(0, 0, 0), Topbar = Color3.fromRGB(5, 5, 5),
-            Shadow = Color3.fromRGB(0, 10, 0), NotificationBackground = Color3.fromRGB(0, 20, 5), TabBackground = Color3.fromRGB(0, 20, 0),
-            TabStroke = Color3.fromRGB(0, 255, 100), TabBackgroundSelected = Color3.fromRGB(0, 80, 30), TabTextColor = Color3.fromRGB(0, 200, 80),
-            ElementBackground = Color3.fromRGB(5, 15, 5), ElementBackgroundHover = Color3.fromRGB(0, 40, 15), ElementStroke = Color3.fromRGB(0, 200, 80),
-            SliderBackground = Color3.fromRGB(0, 50, 20), SliderProgress = Color3.fromRGB(0, 255, 100), ToggleEnabled = Color3.fromRGB(0, 255, 100)
+            Shadow = Color3.fromRGB(0, 10, 0), NotificationBackground = Color3.fromRGB(0, 20, 5), NotificationActionsBackground = Color3.fromRGB(0, 40, 15),
+            TabBackground = Color3.fromRGB(0, 20, 0), TabStroke = Color3.fromRGB(0, 255, 100), TabBackgroundSelected = Color3.fromRGB(0, 80, 30),
+            TabTextColor = Color3.fromRGB(0, 200, 80), SelectedTabTextColor = Color3.fromRGB(0, 255, 100),
+            ElementBackground = Color3.fromRGB(5, 15, 5), ElementBackgroundHover = Color3.fromRGB(0, 40, 15), SecondaryElementBackground = Color3.fromRGB(0, 10, 0),
+            ElementStroke = Color3.fromRGB(0, 200, 80), SecondaryElementStroke = Color3.fromRGB(0, 100, 40),
+            SliderBackground = Color3.fromRGB(0, 50, 20), SliderProgress = Color3.fromRGB(0, 255, 100), SliderStroke = Color3.fromRGB(0, 255, 100),
+            ToggleBackground = Color3.fromRGB(0, 30, 10), ToggleEnabled = Color3.fromRGB(0, 255, 100), ToggleDisabled = Color3.fromRGB(40, 40, 40),
+            ToggleEnabledStroke = Color3.fromRGB(0, 255, 100), ToggleDisabledStroke = Color3.fromRGB(80, 80, 80), ToggleEnabledOuterStroke = Color3.fromRGB(0, 150, 60),
+            ToggleDisabledOuterStroke = Color3.fromRGB(60, 60, 60), DropdownSelected = Color3.fromRGB(0, 40, 15), DropdownUnselected = Color3.fromRGB(0, 20, 5),
+            InputBackground = Color3.fromRGB(5, 10, 5), InputStroke = Color3.fromRGB(0, 180, 70), PlaceholderColor = Color3.fromRGB(0, 100, 40)
         },
         ConfigurationSaving = { Enabled = false }
     })
@@ -377,38 +347,27 @@ local function showHubMenu(userKey, userData)
     MainTab:CreateToggle({
         Name = "Авто-запуск по плейсу",
         CurrentValue = autoExecEnabled,
-        Callback = function(val)
-            autoExecEnabled = val
-            if val then checkAutoExecute() end
-        end
+        Callback = function(val) autoExecEnabled = val; if val then checkAutoExecute() end end
     })
 
-    -- ===== ЗВУКИ =====
+    -- ===== ЗВУКИ (ДОБАВЛЕН PlaceholderText ВО ВСЕ ИНПУТЫ) =====
     SoundTab:CreateSection("Клавиатура")
     SoundTab:CreateToggle({Name = "Включить звуки", CurrentValue = false, Callback = function(v) if v then startKeyboardSounds() else stopKeyboardSounds() end end})
     SoundTab:CreateSlider({Name = "Громкость", Range = {0, 100}, CurrentValue = 40, Callback = function(v) KB.volume = v / 100 end})
-    SoundTab:CreateInput({Name = "ID звука ходьбы", CurrentValue = KB_DEFAULT_WALK, Callback = function(t) KB.walkSound = t end})
-    SoundTab:CreateInput({Name = "ID звука прыжка", CurrentValue = KB_DEFAULT_JUMP, Callback = function(t) KB.jumpSound = t end})
-    SoundTab:CreateInput({Name = "ID звука приземления", CurrentValue = KB_DEFAULT_LAND, Callback = function(t) KB.landSound = t end})
+    
+    SoundTab:CreateInput({Name = "ID звука ходьбы", CurrentValue = KB_DEFAULT_WALK, PlaceholderText = "rbxassetid://...", RemoveTextAfterFocusLost = false, Callback = function(t) KB.walkSound = t end})
+    SoundTab:CreateInput({Name = "ID звука прыжка", CurrentValue = KB_DEFAULT_JUMP, PlaceholderText = "rbxassetid://...", RemoveTextAfterFocusLost = false, Callback = function(t) KB.jumpSound = t end})
+    SoundTab:CreateInput({Name = "ID звука приземления", CurrentValue = KB_DEFAULT_LAND, PlaceholderText = "rbxassetid://...", RemoveTextAfterFocusLost = false, Callback = function(t) KB.landSound = t end})
 
-    -- ===== ИНФО И КЛЮЧ (Пуленепробиваемый вариант) =====
+    -- ===== ИНФО И КЛЮЧ =====
     InfoTab:CreateSection("Информация")
     
-    -- Безопасное получение первых символов ключа
     local safeKey = tostring(userKey or "Unknown")
     local displayKey = string.sub(safeKey, 1, 8) .. "***"
     local role = isOwner and "Владелец (Бессрочно)" or "Пользователь"
 
-    -- Используем кнопки для отображения текста (они не глючат)
-    InfoTab:CreateButton({
-        Name = "Твой статус: " .. role,
-        Callback = function() end
-    })
-
-    InfoTab:CreateButton({
-        Name = "Твой ключ: " .. displayKey,
-        Callback = function() end
-    })
+    InfoTab:CreateButton({Name = "Твой статус: " .. role, Callback = function() end})
+    InfoTab:CreateButton({Name = "Твой ключ: " .. displayKey, Callback = function() end})
 
     InfoTab:CreateButton({
         Name = "Узнать время и HWID ключа",
@@ -417,12 +376,8 @@ local function showHubMenu(userKey, userData)
             task.spawn(function()
                 local info = fetchKeyInfo(userKey)
                 print("[NK3Y HUB] Инфо о ключе: \n" .. info)
-                
                 local lines = {}
-                for line in info:gmatch("[^\r\n]+") do
-                    table.insert(lines, line)
-                end
-                
+                for line in info:gmatch("[^\r\n]+") do table.insert(lines, line) end
                 for i, line in ipairs(lines) do
                     Rayfield:Notify({Title = "Инфо о ключе", Content = line, Duration = 5})
                     task.wait(0.3)
@@ -434,12 +389,8 @@ local function showHubMenu(userKey, userData)
     InfoTab:CreateButton({
         Name = "Скопировать мой ключ",
         Callback = function()
-            if setclipboard then
-                setclipboard(userKey)
-                Rayfield:Notify({Title = "Успех", Content = "Ключ скопирован", Duration = 3})
-            else
-                Rayfield:Notify({Title = "Ошибка", Content = "Экзекьютор не поддерживает копирование", Duration = 3})
-            end
+            if setclipboard then setclipboard(userKey); Rayfield:Notify({Title = "Успех", Content = "Ключ скопирован", Duration = 3})
+            else Rayfield:Notify({Title = "Ошибка", Content = "Экзекьютор не поддерживает копирование", Duration = 3}) end
         end
     })
 
@@ -453,7 +404,6 @@ local function showHubMenu(userKey, userData)
         end
     })
 
-    -- ===== АВТО-ЗАПУСК ПРИ СТАРТЕ =====
     if autoExecEnabled then checkAutoExecute() end
 end
 
