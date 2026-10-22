@@ -1,5 +1,5 @@
 -- ============================================================
--- NK3Y HUB - Pandauth (Debug Mode)
+-- NK3Y HUB - Pandauth (HttpGet + URL Encoding) + Key Info
 -- ============================================================
 
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
@@ -35,7 +35,7 @@ local function applyScaleFix(scale)
 end
 
 -- ============================================================
--- КЛЮЧИ (С ОТЛАДКОЙ)
+-- СИСТЕМА КЛЮЧЕЙ (Panda Auth)
 -- ============================================================
 local OWNER_HASH = 1574169149
 local function djb2(str) local h = 5381 for i=1,#str do h=(h*33+string.byte(str,i))%4294967296 end return h end
@@ -43,27 +43,19 @@ local function djb2(str) local h = 5381 for i=1,#str do h=(h*33+string.byte(str,
 local function checkRemoteKey(key)
     local hwid = tostring(Players.LocalPlayer.UserId)
     local service = "nk3yhub"
-    local url = "https://pandadevelopment.net/v2_validation?service=" .. service .. "&hwid=" .. hwid .. "&key=" .. key
     
-    local success, response = pcall(function()
-        return HttpService:RequestAsync({
-            Url = url, Method = "GET",
-            Headers = { ["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
-        })
-    end)
+    -- URL-кодируем параметры, как требует документация
+    local encodedKey = HttpService:UrlEncode(key)
+    local encodedService = HttpService:UrlEncode(service)
+    local encodedHwid = HttpService:UrlEncode(hwid)
     
-    if not success or not response then
-        return false, "СЕТЬ: " .. tostring(response)
-    end
+    local url = "https://pandadevelopment.net/v2_validation?service=" .. encodedService .. "&hwid=" .. encodedHwid .. "&key=" .. encodedKey
     
-    if not response.Success then
-        return false, "HTTP " .. tostring(response.StatusCode) .. ": " .. tostring(response.StatusMessage)
-    end
+    local success, response = pcall(function() return game:HttpGet(url, true) end)
+    if not success or not response then return false, "СЕТЬ: " .. tostring(response) end
     
-    local ok, data = pcall(function() return HttpService:JSONDecode(response.Body) end)
-    if not ok or not data then
-        return false, "JSON ERR: " .. tostring(response.Body)
-    end
+    local ok, data = pcall(function() return HttpService:JSONDecode(response) end)
+    if not ok or not data then return false, "JSON ERR: " .. tostring(response) end
     
     if data.V2_Authentication == "success" then
         return true, "OK"
@@ -80,8 +72,9 @@ local function validateKey(key)
     return false, msg, nil
 end
 
+-- (Функция fetchKeyInfo остается без изменений, так как она не вызывала 404)
 local function fetchKeyInfo(key)
-    if djb2(key) == OWNER_HASH then return "Бессрочный (Владелец)" end
+    if djb2(key) == OWNER_HASH then return "Бессрочный (Владелец)\nЛимит HWID: Безлимит" end
     local url = "https://pandadevelopment.net/v2_keyinfo?service=nk3yhub&hwid=" .. tostring(Players.LocalPlayer.UserId) .. "&key=" .. key
     local success, response = pcall(function() return game:HttpGet(url, true) end)
     if not success or not response then return "Ошибка соединения." end
@@ -117,7 +110,6 @@ local function showKeyScreen(callback)
     input.BackgroundColor3, input.BorderSizePixel, input.Text = Color3.fromRGB(15, 15, 15), 0, ""
     input.PlaceholderText, input.TextColor3, input.TextScaled, input.Font = "вставь ключ...", Color3.fromRGB(255, 255, 255), true, Enum.Font.Code
 
-    -- УВЕЛИЧИЛИ ПОЛЕ СТАТУСА, ЧТОБЫ ВЛЕЗЛА ОШИБКА
     local status = Instance.new("TextLabel", frame)
     status.Size, status.Position, status.BackgroundTransparency = UDim2.new(0.9, 0, 0, 40), UDim2.new(0.05, 0, 0, 130), 1
     status.Text, status.TextColor3, status.TextScaled, status.TextWrapped, status.Font = "", Color3.fromRGB(255, 80, 80), true, true, Enum.Font.Code
