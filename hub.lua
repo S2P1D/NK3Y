@@ -1,5 +1,5 @@
 -- ============================================================
--- NK3Y HUB - Pandauth (vss) + Key Info + Auto-Execute
+-- NK3Y HUB - Pandauth (RequestAsync) + Key Info + Auto-Execute
 -- ============================================================
 
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
@@ -60,7 +60,7 @@ local function getOptimalScale()
 end
 
 -- ============================================================
--- СИСТЕМА КЛЮЧЕЙ (Pandauth через vss)
+-- СИСТЕМА КЛЮЧЕЙ (Pandauth через RequestAsync)
 -- ============================================================
 local OWNER_HASH = 1574169149 -- NK3Y_OWNER_2026
 
@@ -75,15 +75,34 @@ end
 local function checkRemoteKey(key)
     local hwid = tostring(Players.LocalPlayer.UserId)
     local service = "nk3yhub"
+    local url = "https://pandadevelopment.net/v2_validation?service=" .. service .. "&hwid=" .. hwid .. "&key=" .. key
     
-    -- ИСПОЛЬЗУЕМ vss.pandauth.com ВМЕСТО pandadevelopment.net
-    local url = "https://vss.pandauth.com/v2_validation?service=" .. service .. "&hwid=" .. hwid .. "&key=" .. key
+    -- Используем RequestAsync с User-Agent
+    local success, response = pcall(function()
+        return HttpService:RequestAsync({
+            Url = url,
+            Method = "GET",
+            Headers = {
+                ["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            }
+        })
+    end)
     
-    local success, response = pcall(function() return game:HttpGet(url, true) end)
-    if not success or not response then return false, "Ошибка соединения" end
+    if not success or not response or not response.Success then
+        -- Выводим в консоль код ответа для отладки (если есть)
+        if response then
+            print("[NK3Y DEBUG] Ошибка HTTP. Код:", response.StatusCode)
+        else
+            print("[NK3Y DEBUG] Ошибка выполнения запроса:", tostring(response))
+        end
+        return false, "Ошибка соединения"
+    end
     
-    local ok, data = pcall(function() return HttpService:JSONDecode(response) end)
-    if not ok or not data then return false, "Неверный ответ" end
+    local ok, data = pcall(function() return HttpService:JSONDecode(response.Body) end)
+    if not ok or not data then
+        print("[NK3Y DEBUG] Ошибка парсинга JSON:", response.Body)
+        return false, "Неверный ответ"
+    end
     
     if data.V2_Authentication == "success" then
         return true, "OK"
@@ -105,9 +124,7 @@ local function fetchKeyInfo(key)
 
     local hwid = tostring(Players.LocalPlayer.UserId)
     local service = "nk3yhub"
-    
-    -- ТУТ ТОЖЕ МЕНЯЕМ ДОМЕН ДЛЯ ИНФО
-    local url = "https://vss.pandauth.com/v2_keyinfo?service=" .. service .. "&hwid=" .. hwid .. "&key=" .. key
+    local url = "https://pandadevelopment.net/v2_keyinfo?service=" .. service .. "&hwid=" .. hwid .. "&key=" .. key
     
     local success, response = pcall(function() return game:HttpGet(url, true) end)
     if not success or not response then return "Ошибка соединения с сервером." end
