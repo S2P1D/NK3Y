@@ -1,5 +1,5 @@
 -- ============================================================
--- NK3Y HUB - Loader + Key System + Keyboard Sounds + Boombox
+-- NK3Y HUB - Loader + Pandauth Key System + Keyboard Sounds + Boombox
 -- ============================================================
 
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
@@ -9,10 +9,8 @@ local RunService = game:GetService("RunService")
 local SoundService = game:GetService("SoundService")
 
 -- ============================================================
--- ССЫЛКИ
+-- ССЫЛКИ НА СКРИПТЫ
 -- ============================================================
-local KEYS_URL = "https://raw.githubusercontent.com/S2P1D/NK3Y/main/keys.json"
-
 local SCRIPTS = {
     dcyf = {
         name = "DCYF Autofarm",
@@ -66,9 +64,10 @@ local function getOptimalScale()
 end
 
 -- ============================================================
--- OWNER KEY HASH
+-- СИСТЕМА КЛЮЧЕЙ (Pandauth + Owner Bypass)
 -- ============================================================
-local OWNER_HASH = 1574169149 -- NK3Y_OWNER_2026
+-- Твой личный ключ: NK3Y_OWNER_2026 (захеширован)
+local OWNER_HASH = 1574169149
 
 local function djb2(str)
     local h = 5381
@@ -78,49 +77,51 @@ local function djb2(str)
     return h
 end
 
--- ============================================================
--- REMOTE KEY CHECK
--- ============================================================
-local function fetchRemoteKeys()
-    local ok, response = pcall(function()
-        return game:HttpGet(KEYS_URL, true)
+-- Проверка через Pandauth API
+local function checkRemoteKey(key)
+    local hwid = tostring(game:GetService("Players").LocalPlayer.UserId)
+    -- ВАЖНО: Здесь должен быть твой Identifier (без подчеркиваний)
+    local service = "nk3yhub" 
+    
+    local url = "https://pandadevelopment.net/v2_validation?service=" .. service .. "&hwid=" .. hwid .. "&key=" .. key
+    
+    local success, response = pcall(function()
+        return game:HttpGet(url, true)
     end)
-    if not ok or not response then return nil end
-    local ok2, data = pcall(function()
+    
+    if not success or not response then
+        return false, "Ошибка соединения с сервером ключей"
+    end
+    
+    local ok, data = pcall(function()
         return HttpService:JSONDecode(response)
     end)
-    if not ok2 or not data then return nil end
-    return data.user_keys or {}
-end
-
-local function checkRemoteKey(key)
-    local keys = fetchRemoteKeys()
-    if not keys then return false, "Не удалось проверить ключ" end
-    for _, entry in ipairs(keys) do
-        if entry.key == key then
-            if entry.expires then
-                if os.time() > entry.expires then
-                    return false, "Ключ истёк"
-                end
-            end
-            return true, "OK"
-        end
+    
+    if not ok or not data then
+        return false, "Неверный ответ от сервера"
     end
-    return false, "Ключ не найден"
+    
+    if data.V2_Authentication == "success" then
+        return true, "OK"
+    else
+        return false, data.reason or "Ключ недействителен"
+    end
 end
 
 local function validateKey(key)
     if not key or key == "" then return false, "Пустой ключ", nil end
+    -- 1. Проверка на твой личный ключ (Владелец)
     if djb2(key) == OWNER_HASH then
         return true, "OK", { owner = true }
     end
+    -- 2. Проверка ключа через Pandauth
     local ok, msg = checkRemoteKey(key)
     if ok then return true, "OK", { owner = false } end
     return false, msg or "Неверный ключ", nil
 end
 
 -- ============================================================
--- SAVE KEY
+-- СОХРАНЕНИЕ КЛЮЧА
 -- ============================================================
 local KEY_FILE = "NK3Y_HUB_KEY.txt"
 
@@ -139,26 +140,17 @@ local function saveKey(key)
 end
 
 -- ============================================================
--- KEYBOARD SOUNDS
+-- ЗВУКИ КЛАВИАТУРЫ
 -- ============================================================
 local KB = {
-    enabled = false,
-    volume = 0.4,
-    walkEnabled = true,
-    jumpEnabled = true,
-    landEnabled = true,
-    walkInterval = 0.35,
-    lastWalk = 0,
-    walkSound = nil,
-    jumpSound = nil,
-    landSound = nil,
-    conns = {},
-    threads = {},
+    enabled = false, volume = 0.4, walkEnabled = true, jumpEnabled = true, landEnabled = true,
+    walkInterval = 0.35, lastWalk = 0, walkSound = nil, jumpSound = nil, landSound = nil,
+    conns = {}, threads = {},
 }
 
-local KB_DEFAULT_WALK = "rbxassetid://512442625"
-local KB_DEFAULT_JUMP = "rbxassetid://512442625"
-local KB_DEFAULT_LAND = "rbxassetid://512442625"
+local KB_DEFAULT_WALK = "rbxassetid://7494098965"
+local KB_DEFAULT_JUMP = "rbxassetid://7494098965"
+local KB_DEFAULT_LAND = "rbxassetid://7494098965"
 
 local function createKbSound(name, id)
     local s = Instance.new("Sound")
@@ -170,8 +162,7 @@ local function createKbSound(name, id)
 end
 
 local function playKbSound(sound)
-    if not sound then return end
-    if not sound.IsLoaded then return end
+    if not sound or not sound.IsLoaded then return end
     sound:Stop()
     sound:Play()
 end
@@ -221,22 +212,16 @@ local function startKeyboardSounds()
         if hum then hookHumanoid(hum) end
     end
 
-    if Players.LocalPlayer.Character then
-        hookChar(Players.LocalPlayer.Character)
-    end
+    if Players.LocalPlayer.Character then hookChar(Players.LocalPlayer.Character) end
     local charConn = Players.LocalPlayer.CharacterAdded:Connect(hookChar)
     table.insert(KB.conns, charConn)
 end
 
 local function stopKeyboardSounds()
     KB.enabled = false
-    for _, c in ipairs(KB.conns) do
-        pcall(function() c:Disconnect() end)
-    end
+    for _, c in ipairs(KB.conns) do pcall(function() c:Disconnect() end) end
     KB.conns = {}
-    for _, t in ipairs(KB.threads) do
-        pcall(function() task.cancel(t) end)
-    end
+    for _, t in ipairs(KB.threads) do pcall(function() task.cancel(t) end) end
     KB.threads = {}
     if KB.walkSound then KB.walkSound:Stop() end
     if KB.jumpSound then KB.jumpSound:Stop() end
@@ -244,14 +229,10 @@ local function stopKeyboardSounds()
 end
 
 -- ============================================================
--- BOOMBOX
+-- БУМБОКС
 -- ============================================================
 local Boombox = {
-    sound = nil,
-    volume = 0.5,
-    isPlaying = false,
-    currentId = nil,
-    loop = false,
+    sound = nil, volume = 0.5, isPlaying = false, currentId = nil, loop = false,
 }
 
 local function getBoomboxSound()
@@ -278,9 +259,7 @@ end
 
 local function tryPlayBoombox(idText)
     local id = normalizeTrackId(idText)
-    if not id then
-        return false, "неверный ID"
-    end
+    if not id then return false, "неверный ID" end
 
     local s = getBoomboxSound()
     s:Stop()
@@ -288,12 +267,8 @@ local function tryPlayBoombox(idText)
     s.Volume = Boombox.volume
     s.Looped = Boombox.loop
 
-    -- Форсируем загрузку ассета
-    pcall(function()
-        game:GetService("ContentProvider"):PreloadAsync({s})
-    end)
+    pcall(function() game:GetService("ContentProvider"):PreloadAsync({s}) end)
 
-    -- Проверяем загрузку в течение 3 секунд
     local waited = 0
     while waited < 3 do
         if s.IsLoaded and s.TimeLength > 0 then break end
@@ -316,21 +291,79 @@ local function tryPlayBoombox(idText)
 end
 
 local function stopBoombox()
-    if Boombox.sound then
-        Boombox.sound:Stop()
-    end
+    if Boombox.sound then Boombox.sound:Stop() end
     Boombox.isPlaying = false
 end
 
 local function pauseBoombox()
-    if Boombox.sound then
-        Boombox.sound:Pause()
-        Boombox.isPlaying = false
-    end
+    if Boombox.sound then Boombox.sound:Pause() end
+    Boombox.isPlaying = false
+end
+
+local function createBoomboxTab(Window)
+    local BoomboxTab = Window:CreateTab("Бумбокс", 4483362458)
+    BoomboxTab:CreateSection("Ввод трека")
+    BoomboxTab:CreateParagraph({
+        Title = "Как вводить ID:",
+        Content = "• rbxassetid://1234567890\n• или просто число: 1234567890\n• или ссылку из Roblox library"
+    })
+
+    local trackInputRef = nil
+    trackInputRef = BoomboxTab:CreateInput({
+        Name = "ID трека",
+        CurrentValue = "",
+        PlaceholderText = "rbxassetid://... или число",
+        RemoveTextAfterFocusLost = false,
+        Callback = function(text) trackInputRef.Value = text end
+    })
+
+    BoomboxTab:CreateButton({
+        Name = "▶ Воспроизвести",
+        Callback = function()
+            local txt = trackInputRef and trackInputRef.Value or ""
+            if txt == "" then
+                Rayfield:Notify({Title = "Бумбокс", Content = "Введи ID трека", Duration = 3})
+                return
+            end
+            Rayfield:Notify({Title = "Бумбокс", Content = "Загрузка...", Duration = 2})
+            task.spawn(function()
+                local ok, msg = tryPlayBoombox(txt)
+                Rayfield:Notify({Title = "Бумбокс", Content = (ok and "✓ " or "✗ ") .. msg, Duration = 4})
+            end)
+        end
+    })
+
+    BoomboxTab:CreateButton({
+        Name = "⏸ Пауза",
+        Callback = function() pauseBoombox(); Rayfield:Notify({Title = "Бумбокс", Content = "Пауза", Duration = 2}) end
+    })
+
+    BoomboxTab:CreateButton({
+        Name = "⏹ Стоп",
+        Callback = function() stopBoombox(); Rayfield:Notify({Title = "Бумбокс", Content = "Стоп", Duration = 2}) end
+    })
+
+    BoomboxTab:CreateSection("Настройки")
+    BoomboxTab:CreateSlider({
+        Name = "Громкость",
+        Range = {0, 100}, Increment = 5, CurrentValue = 50,
+        Callback = function(value)
+            Boombox.volume = value / 100
+            if Boombox.sound then Boombox.sound.Volume = Boombox.volume end
+        end
+    })
+    BoomboxTab:CreateToggle({
+        Name = "Повтор трека (loop)",
+        CurrentValue = false,
+        Callback = function(value)
+            Boombox.loop = value
+            if Boombox.sound then Boombox.sound.Looped = value end
+        end
+    })
 end
 
 -- ============================================================
--- KEY SCREEN
+-- ЭКРАН ВВОДА КЛЮЧА
 -- ============================================================
 local function showKeyScreen(callback)
     local keyGui = Instance.new("ScreenGui")
@@ -457,7 +490,7 @@ local function showKeyScreen(callback)
 end
 
 -- ============================================================
--- HUB MENU
+-- ГЛАВНОЕ МЕНЮ ХАБА
 -- ============================================================
 local function showHubMenu(userKey, userData)
     local isOwner = userData and userData.owner or false
@@ -506,7 +539,6 @@ local function showHubMenu(userKey, userData)
 
     local MainTab = Window:CreateTab("Скрипты", 4483362458)
     local SoundTab = Window:CreateTab("Звуки", 4483362458)
-    local BoomboxTab = Window:CreateTab("Бумбокс", 4483362458)
     local InfoTab = Window:CreateTab("Инфо", nil)
 
     -- ===== СКРИПТЫ =====
@@ -521,6 +553,8 @@ local function showHubMenu(userKey, userData)
             end)
             if not ok then
                 Rayfield:Notify({Title = "Ошибка", Content = tostring(err), Duration = 5})
+            else
+                createBoomboxTab(Window)
             end
         end
     })
@@ -536,13 +570,14 @@ local function showHubMenu(userKey, userData)
             end)
             if not ok then
                 Rayfield:Notify({Title = "Ошибка", Content = tostring(err), Duration = 5})
+            else
+                createBoomboxTab(Window)
             end
         end
     })
 
     -- ===== ЗВУКИ =====
     SoundTab:CreateSection("Клавиатура")
-
     SoundTab:CreateToggle({
         Name = "Включить звуки клавиатуры",
         CurrentValue = false,
@@ -556,12 +591,9 @@ local function showHubMenu(userKey, userData)
             end
         end
     })
-
     SoundTab:CreateSlider({
         Name = "Громкость",
-        Range = {0, 100},
-        Increment = 5,
-        CurrentValue = 40,
+        Range = {0, 100}, Increment = 5, CurrentValue = 40,
         Callback = function(value)
             KB.volume = value / 100
             if KB.walkSound then KB.walkSound.Volume = KB.volume end
@@ -569,198 +601,41 @@ local function showHubMenu(userKey, userData)
             if KB.landSound then KB.landSound.Volume = KB.volume end
         end
     })
-
     SoundTab:CreateSlider({
         Name = "Частота кликов при ходьбе (сек)",
-        Range = {0.1, 1},
-        Increment = 0.05,
-        CurrentValue = 0.35,
-        Callback = function(value)
-            KB.walkInterval = value
-        end
+        Range = {0.1, 1}, Increment = 0.05, CurrentValue = 0.35,
+        Callback = function(value) KB.walkInterval = value end
     })
-
     SoundTab:CreateSection("Что играть")
-
-    SoundTab:CreateToggle({
-        Name = "Звук при ходьбе",
-        CurrentValue = true,
-        Callback = function(value)
-            KB.walkEnabled = value
-        end
-    })
-
-    SoundTab:CreateToggle({
-        Name = "Звук при прыжке",
-        CurrentValue = true,
-        Callback = function(value)
-            KB.jumpEnabled = value
-        end
-    })
-
-    SoundTab:CreateToggle({
-        Name = "Звук при приземлении",
-        CurrentValue = true,
-        Callback = function(value)
-            KB.landEnabled = value
-        end
-    })
-
+    SoundTab:CreateToggle({Name = "Звук при ходьбе", CurrentValue = true, Callback = function(v) KB.walkEnabled = v end})
+    SoundTab:CreateToggle({Name = "Звук при прыжке", CurrentValue = true, Callback = function(v) KB.jumpEnabled = v end})
+    SoundTab:CreateToggle({Name = "Звук при приземлении", CurrentValue = true, Callback = function(v) KB.landEnabled = v end})
+    
     SoundTab:CreateSection("Свои звуки (rbxassetid://)")
-
-    SoundTab:CreateInput({
-        Name = "ID звука ходьбы",
-        CurrentValue = KB_DEFAULT_WALK,
-        PlaceholderText = "rbxassetid://...",
-        RemoveTextAfterFocusLost = false,
-        Callback = function(text)
-            if KB.walkSound then
-                KB.walkSound.SoundId = text
-            end
-        end
-    })
-
-    SoundTab:CreateInput({
-        Name = "ID звука прыжка",
-        CurrentValue = KB_DEFAULT_JUMP,
-        PlaceholderText = "rbxassetid://...",
-        RemoveTextAfterFocusLost = false,
-        Callback = function(text)
-            if KB.jumpSound then
-                KB.jumpSound.SoundId = text
-            end
-        end
-    })
-
-    SoundTab:CreateInput({
-        Name = "ID звука приземления",
-        CurrentValue = KB_DEFAULT_LAND,
-        PlaceholderText = "rbxassetid://...",
-        RemoveTextAfterFocusLost = false,
-        Callback = function(text)
-            if KB.landSound then
-                KB.landSound.SoundId = text
-            end
-        end
-    })
-
-    -- ===== БУМБОКС =====
-    BoomboxTab:CreateSection("Ввод трека")
-    BoomboxTab:CreateParagraph({
-        Title = "Как вводить ID:",
-        Content = "• rbxassetid://1234567890\n• или просто число: 1234567890\n• или ссылку из Roblox library"
-    })
-
-    local trackInputRef = nil
-    local statusRef = nil
-
-    trackInputRef = BoomboxTab:CreateInput({
-        Name = "ID трека",
-        CurrentValue = "",
-        PlaceholderText = "rbxassetid://... или число",
-        RemoveTextAfterFocusLost = false,
-        Callback = function(text)
-            trackInputRef.Value = text
-        end
-    })
-
-    BoomboxTab:CreateButton({
-        Name = "▶ Воспроизвести",
-        Callback = function()
-            local txt = trackInputRef and trackInputRef.Value or ""
-            if txt == "" then
-                Rayfield:Notify({Title = "Бумбокс", Content = "Введи ID трека", Duration = 3})
-                return
-            end
-            Rayfield:Notify({Title = "Бумбокс", Content = "Загрузка...", Duration = 2})
-            task.spawn(function()
-                local ok, msg = tryPlayBoombox(txt)
-                if ok then
-                    Rayfield:Notify({
-                        Title = "Бумбокс",
-                        Content = "✓ " .. msg,
-                        Duration = 4
-                    })
-                else
-                    Rayfield:Notify({
-                        Title = "Бумбокс",
-                        Content = "✗ " .. msg,
-                        Duration = 4
-                    })
-                end
-            end)
-        end
-    })
-
-    BoomboxTab:CreateButton({
-        Name = "⏸ Пауза",
-        Callback = function()
-            pauseBoombox()
-            Rayfield:Notify({Title = "Бумбокс", Content = "Пауза", Duration = 2})
-        end
-    })
-
-    BoomboxTab:CreateButton({
-        Name = "⏹ Стоп",
-        Callback = function()
-            stopBoombox()
-            Rayfield:Notify({Title = "Бумбокс", Content = "Стоп", Duration = 2})
-        end
-    })
-
-    BoomboxTab:CreateSection("Настройки")
-
-    BoomboxTab:CreateSlider({
-        Name = "Громкость",
-        Range = {0, 100},
-        Increment = 5,
-        CurrentValue = 50,
-        Callback = function(value)
-            Boombox.volume = value / 100
-            if Boombox.sound then
-                Boombox.sound.Volume = Boombox.volume
-            end
-        end
-    })
-
-    BoomboxTab:CreateToggle({
-        Name = "Повтор трека (loop)",
-        CurrentValue = false,
-        Callback = function(value)
-            Boombox.loop = value
-            if Boombox.sound then
-                Boombox.sound.Looped = value
-            end
-        end
-    })
+    SoundTab:CreateInput({Name = "ID звука ходьбы", CurrentValue = KB_DEFAULT_WALK, PlaceholderText = "rbxassetid://...", RemoveTextAfterFocusLost = false, Callback = function(text) if KB.walkSound then KB.walkSound.SoundId = text end end})
+    SoundTab:CreateInput({Name = "ID звука прыжка", CurrentValue = KB_DEFAULT_JUMP, PlaceholderText = "rbxassetid://...", RemoveTextAfterFocusLost = false, Callback = function(text) if KB.jumpSound then KB.jumpSound.SoundId = text end end})
+    SoundTab:CreateInput({Name = "ID звука приземления", CurrentValue = KB_DEFAULT_LAND, PlaceholderText = "rbxassetid://...", RemoveTextAfterFocusLost = false, Callback = function(text) if KB.landSound then KB.landSound.SoundId = text end end})
 
     -- ===== ИНФО =====
     InfoTab:CreateParagraph({
         Title = "NK3Y HUB",
-        Content = "Версия: 2.4\nАвтор: NK3Y\nСтатус: " .. (isOwner and "OWNER" or "USER") .. "\nКлюч: " .. string.sub(userKey, 1, 4) .. "***"
+        Content = "Версия: 2.6 (Pandauth)\nАвтор: NK3Y\nСтатус: " .. (isOwner and "OWNER" or "USER") .. "\nКлюч: " .. string.sub(userKey, 1, 6) .. "***"
     })
-
     InfoTab:CreateButton({
         Name = "Сменить ключ",
         Callback = function()
-            if delfile and isfile(KEY_FILE) then
-                delfile(KEY_FILE)
-            end
+            if delfile and isfile(KEY_FILE) then delfile(KEY_FILE) end
             stopKeyboardSounds()
             stopBoombox()
             Rayfield:Notify({Title = "Ключ сброшен", Content = "Перезапусти скрипт", Duration = 3})
         end
     })
 
-    Rayfield:Notify({
-        Title = "NK3Y HUB",
-        Content = isOwner and "Добро пожаловать, создатель!" or "Добро пожаловать!",
-        Duration = 5
-    })
+    Rayfield:Notify({Title = "NK3Y HUB", Content = isOwner and "Добро пожаловать, создатель!" or "Добро пожаловать!", Duration = 5})
 end
 
 -- ============================================================
--- START
+-- СТАРТ
 -- ============================================================
 local savedKey = loadSavedKey()
 
@@ -769,12 +644,8 @@ if savedKey then
     if ok then
         showHubMenu(savedKey, data)
     else
-        showKeyScreen(function(key, data)
-            showHubMenu(key, data)
-        end)
+        showKeyScreen(function(key, data) showHubMenu(key, data) end)
     end
 else
-    showKeyScreen(function(key, data)
-        showHubMenu(key, data)
-    end)
+    showKeyScreen(function(key, data) showHubMenu(key, data) end)
 end
