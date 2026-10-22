@@ -115,10 +115,10 @@ local function fetchKeyInfo(key)
     local url = "https://pandadevelopment.net/v2_keyinfo?service=" .. service .. "&hwid=" .. hwid .. "&key=" .. key
     
     local success, response = pcall(function() return game:HttpGet(url, true) end)
-    if not success or not response then return "Не удалось получить данные от Pandauth." end
+    if not success or not response then return "Ошибка соединения с сервером." end
     
     local ok, data = pcall(function() return HttpService:JSONDecode(response) end)
-    if not ok or not data or not data.Key_Information then return "Неверный формат данных." end
+    if not ok or not data or not data.Key_Information then return "Неверный формат данных от Pandauth." end
     
     local info = data.Key_Information
     local exp = info.Days_Left and (info.Days_Left .. " дн.") or (info.Expires and os.date("%d.%m.%Y", info.Expires) or "Бессрочный")
@@ -389,21 +389,43 @@ local function showHubMenu(userKey, userData)
     SoundTab:CreateInput({Name = "ID звука прыжка", CurrentValue = KB_DEFAULT_JUMP, Callback = function(t) KB.jumpSound = t end})
     SoundTab:CreateInput({Name = "ID звука приземления", CurrentValue = KB_DEFAULT_LAND, Callback = function(t) KB.landSound = t end})
 
-    -- ===== ИНФО И КЛЮЧ =====
-    InfoTab:CreateSection("Информация о ключе")
-    local infoLabel = InfoTab:CreateParagraph({Title = "Загрузка данных...", Content = "..."})
+    -- ===== ИНФО И КЛЮЧ (Исправленная версия) =====
+    InfoTab:CreateSection("Информация")
     
-    local function updateInfo()
-        local infoText = fetchKeyInfo(userKey)
-        infoLabel:Set({Title = "Статус ключа:", Content = infoText})
-    end
-    task.spawn(updateInfo)
+    -- Показываем статус из данных, которые уже есть
+    local statusText = isOwner and "Владелец (Бессрочно)" or "Пользователь"
+    InfoTab:CreateParagraph({
+        Title = "Твой статус:",
+        Content = statusText .. "\nКлюч: " .. string.sub(userKey, 1, 8) .. "***"
+    })
 
     InfoTab:CreateButton({
-        Name = "Обновить инфо о ключе",
+        Name = "Узнать время и HWID ключа",
         Callback = function()
-            Rayfield:Notify({Title = "Обновление", Content = "Запрос к Pandauth...", Duration = 2})
-            updateInfo()
+            Rayfield:Notify({Title = "Pandauth", Content = "Запрос данных...", Duration = 2})
+            task.spawn(function()
+                local info = fetchKeyInfo(userKey)
+                local lines = {}
+                for line in info:gmatch("[^\r\n]+") do
+                    table.insert(lines, line)
+                end
+                for i, line in ipairs(lines) do
+                    Rayfield:Notify({Title = "Инфо о ключе", Content = line, Duration = 5})
+                    task.wait(0.3)
+                end
+            end)
+        end
+    })
+
+    InfoTab:CreateButton({
+        Name = "Скопировать ключ",
+        Callback = function()
+            if setclipboard then
+                setclipboard(userKey)
+                Rayfield:Notify({Title = "Успех", Content = "Ключ скопирован в буфер обмена", Duration = 3})
+            else
+                Rayfield:Notify({Title = "Ошибка", Content = "Твой экзекьютор не поддерживает копирование", Duration = 3})
+            end
         end
     })
 
