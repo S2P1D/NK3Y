@@ -1,5 +1,5 @@
 -- ============================================================
--- NK3Y Bahkruums (Halloween Doors + Safe UI)
+-- NK3Y Bahkruums (Auto-Open Doors + Safe UI)
 -- ============================================================
 
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
@@ -110,15 +110,16 @@ local function startAutoHotdog()
     end)
 end
 
--- АВТОФАРМ ДВЕРЕЙ (HALLOWEEN DOOR)
+-- АВТОФАРМ ДВЕРЕЙ С АВТООТКРЫТИЕМ
 local doorFarmEnabled = false
-local doorDelay = 1.5
+local doorDelay = 1.0
 local ignoredDoors = {}
+
 local function startDoorFarm()
     if doorFarmEnabled then return end
     doorFarmEnabled = true
     
-    -- Врубаем Instant PP
+    -- Врубаем Instant PP для всех кнопок в игре
     for _, obj in ipairs(workspace:GetDescendants()) do
         if obj:IsA("ProximityPrompt") then obj.HoldDuration = 0 end
     end
@@ -158,7 +159,22 @@ local function startDoorFarm()
                 end
 
                 if nearest then
+                    -- ТП к двери
                     hrp.CFrame = CFrame.new(nearest.pos + Vector3.new(0, 3, 0))
+                    
+                    -- Ждем чуть-чуть, чтобы прогрузились хитбоксы
+                    task.wait(0.1)
+                    
+                    -- Ищем кнопку внутри двери и нажимаем её
+                    local prompt = nearest.model:FindFirstChildWhichIsA("ProximityPrompt", true)
+                    if prompt then
+                        pcall(function()
+                            prompt:InputHoldBegin()
+                            task.wait(0.05)
+                            prompt:InputHoldEnd()
+                        end)
+                    end
+
                     ignoredDoors[nearest.model] = tick()
                     task.wait(doorDelay)
                 end
@@ -204,7 +220,7 @@ MainTab:CreateToggle({Name = "Авто-хил хот-догами", CurrentValue
 
 -- ===== ДВЕРИ =====
 DoorsTab:CreateSection("Хэллоуинские двери")
-DoorsTab:CreateToggle({Name = "Автофарм Halloween Door", CurrentValue = false, Callback = function(v) if v then startDoorFarm() else stopDoorFarm() end end})
+DoorsTab:CreateToggle({Name = "Автофарм дверей (с авто-открытием)", CurrentValue = false, Callback = function(v) if v then startDoorFarm() else stopDoorFarm() end end})
 DoorsTab:CreateSlider({Name = "Задержка у двери (сек)", Range = {0.5, 5}, Increment = 0.5, CurrentValue = doorDelay, Callback = function(v) doorDelay = v end})
 DoorsTab:CreateButton({Name = "Врубить InstantPP (мгновенно)", Callback = function()
     local count = 0
