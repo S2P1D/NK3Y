@@ -1,5 +1,5 @@
 -- ============================================================
--- NK3Y Bahkruums (Safe UI + Door Farm + InstantPP)
+-- NK3Y Bahkruums (Ultra Safe Version)
 -- ============================================================
 
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
@@ -13,34 +13,17 @@ local player = Players.LocalPlayer
 local userKey = getgenv().NK3Y_Key or "Unknown"
 
 -- ============================================================
--- БЕЗОПАСНАЯ ЗАГРУЗКА REMOTES (В ФОНЕ)
+-- БЕЗОПАСНАЯ ЗАГРУЗКА REMOTES
 -- ============================================================
 local ShopRemote, BhopRemote
 task.spawn(function()
     pcall(function()
-        ShopRemote = game.ReplicatedStorage:WaitForChild("Assets", 5):WaitForChild("Remotes", 5):WaitForChild("Shop", 5)
+        ShopRemote = game.ReplicatedStorage:WaitForChild("Assets", 10):WaitForChild("Remotes", 10):WaitForChild("Shop", 10)
     end)
     pcall(function()
-        BhopRemote = game.ReplicatedStorage:WaitForChild("Assets", 5):WaitForChild("Remotes", 5):WaitForChild("Player", 5):WaitForChild("Bhop", 5)
+        BhopRemote = game.ReplicatedStorage:WaitForChild("Assets", 10):WaitForChild("Remotes", 10):WaitForChild("Player", 10):WaitForChild("Bhop", 10)
     end)
 end)
-
--- ============================================================
--- БУМБОКС
--- ============================================================
-local Boombox = { sound = nil, volume = 0.5, loop = false }
-local function tryPlayBoombox(idText)
-    if not idText or idText == "" then return false, "Пустой ID" end
-    local id = idText:gsub("%s+", "")
-    if not id:find("rbxassetid://") then id = "rbxassetid://" .. (id:match("(%d+)") or id) end
-    if not Boombox.sound then Boombox.sound = Instance.new("Sound", SoundService) end
-    local s = Boombox.sound
-    s:Stop(); s.SoundId = id; s.Volume = Boombox.volume; s.Looped = Boombox.loop
-    pcall(function() game:GetService("ContentProvider"):PreloadAsync({s}) end)
-    local waited = 0
-    while waited < 3 and not (s.IsLoaded and s.TimeLength > 0) do task.wait(0.1); waited = waited + 0.1 end
-    if s.IsLoaded and s.TimeLength > 0 then s:Play(); return true, "успешно!" else s:Stop(); s.SoundId = ""; return false, "заблокирован/удалён" end
-end
 
 -- ============================================================
 -- ЛОКАЛИЗАЦИЯ
@@ -50,9 +33,8 @@ local Locales = {
         window_title = "NK3Y Bahkruums", loading_title = "Загрузка...", loading_subtitle = "by NK3Y",
         tab_main = "Основное", tab_visuals = "Визуал", tab_doors = "Двери", tab_boombox = "Бумбокс", tab_info = "Инфо",
         auto_hotdog = "Авто-хил хот-догами", speed_hack = "Speed Hack", speed_value = "Скорость",
-        auto_farm = "Автофарм (BHOP + деньги)", anti_afk = "Anti-AFK", nextbot_esp = "ESP некстботов",
-        player_esp = "ESP игроков", item_esp = "ESP предметов", money_counter = "Счётчик денег",
-        door_farm = "Автофарм дверей", door_delay = "Задержка у двери (сек)",
+        auto_farm = "Автофарм (BHOP + деньги)", player_esp = "ESP игроков", item_esp = "ESP предметов", 
+        money_counter = "Счётчик денег", door_farm = "Автофарм дверей", door_delay = "Задержка у двери (сек)",
         notify_loaded = "Загружен. by NK3Y"
     }
 }
@@ -68,91 +50,32 @@ local speedValue, defaultSpeed = 32, 16
 local autoFarmEnabled = false
 local doorFarmEnabled, doorFarmThread = false, nil
 local doorDelay = 1.5
-local instantPPApplied = false
 
 local function getHumanoid() local c = player.Character; return c and c:FindFirstChildOfClass("Humanoid") end
 
 -- ============================================================
--- INSTANT PP
+-- БЕЗОПАСНЫЕ ФУНКЦИИ
 -- ============================================================
-local function applyInstantPP()
-    local count = 0
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("ProximityPrompt") then
-            obj.HoldDuration = 0
-            count = count + 1
-        end
-    end
-    if count > 0 then
-        Rayfield:Notify({Title = "InstantPP", Content = "Установлено для " .. count .. " дверей", Duration = 2})
-    end
-    instantPPApplied = true
-end
-
-local function maintainInstantPP()
+local function startAutoHotdog()
+    if autoHotdogEnabled then return end
+    autoHotdogEnabled = true
     task.spawn(function()
-        while doorFarmEnabled do
-            task.wait(3)
-            for _, obj in ipairs(workspace:GetDescendants()) do
-                if obj:IsA("ProximityPrompt") and obj.HoldDuration > 0 then
-                    obj.HoldDuration = 0
+        while autoHotdogEnabled do
+            local hum = getHumanoid()
+            if hum and hum.Health > 0 and hum.Health < hum.MaxHealth and ShopRemote then
+                local b = player:FindFirstChild("Backpack")
+                local dog = (b and b:FindFirstChild("Hotdog")) or (player.Character and player.Character:FindFirstChild("Hotdog"))
+                
+                if not dog then 
+                    pcall(function() ShopRemote:FireServer("Item", "Hotdog") end) 
                 end
-            end
-        end
-    end)
-end
-
--- ============================================================
--- ПОИСК ДВЕРЕЙ И АВТОФАРМ
--- ============================================================
-local function findDoors()
-    local doors = {}
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("Model") or obj:IsA("BasePart") then
-            local name = string.lower(obj.Name)
-            if name:find("door") or name:find("gate") then
-                local part = obj:IsA("BasePart") and obj or obj:FindFirstChildWhichIsA("BasePart")
-                if part then table.insert(doors, part) end
-            else
-                local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt")
-                if prompt then
-                    local part = obj:IsA("BasePart") and obj or obj:FindFirstChildWhichIsA("BasePart")
-                    if part then table.insert(doors, part) end
-                end
-            end
-        end
-    end
-    return doors
-end
-
-local function startDoorFarm()
-    if doorFarmEnabled then return end
-    doorFarmEnabled = true
-    
-    if not instantPPApplied then
-        applyInstantPP()
-        maintainInstantPP()
-    end
-    
-    doorFarmThread = task.spawn(function()
-        while doorFarmEnabled do
-            local char = player.Character
-            local hrp = char and char:FindFirstChild("HumanoidRootPart")
-            if hrp then
-                local doors = findDoors()
-                local nearest, nearestDist = nil, math.huge
-                for _, part in ipairs(doors) do
-                    if part and part.Parent then
-                        local dist = (part.Position - hrp.Position).Magnitude
-                        if dist < nearestDist then
-                            nearest = part
-                            nearestDist = dist
-                        end
-                    end
-                end
-                if nearest then
-                    hrp.CFrame = CFrame.new(nearest.Position + Vector3.new(0, 3, 0))
-                    task.wait(doorDelay)
+                task.wait(0.5)
+                
+                local dog2 = (b and b:FindFirstChild("Hotdog")) or (player.Character and player.Character:FindFirstChild("Hotdog"))
+                if dog2 then
+                    if dog2.Parent ~= player.Character then dog2.Parent = player.Character; task.wait(0.5) end
+                    pcall(function() VirtualUser:CaptureController(); VirtualUser:ClickButton1(Vector2.new(0,0)) end)
+                    task.wait(2)
                 end
             end
             task.wait(0.5)
@@ -160,21 +83,15 @@ local function startDoorFarm()
     end)
 end
 
-local function stopDoorFarm()
-    doorFarmEnabled = false
-    if doorFarmThread then
-        task.cancel(doorFarmThread)
-        doorFarmThread = nil
-    end
-    instantPPApplied = false
+local function startSpeed() 
+    speedEnabled = true
+    task.spawn(function() 
+        while speedEnabled do 
+            pcall(function() local h = getHumanoid(); if h then h.WalkSpeed = speedValue end end)
+            task.wait(0.1) 
+        end 
+    end) 
 end
-
--- ============================================================
--- СТАРЫЕ ФУНКЦИИ
--- ============================================================
-local function findHotdog() local b = player:FindFirstChild("Backpack"); return (b and b:FindFirstChild("Hotdog")) or (player.Character and player.Character:FindFirstChild("Hotdog")) end
-local function startAutoHotdog() if autoHotdogEnabled then return end autoHotdogEnabled = true task.spawn(function() while autoHotdogEnabled do local hum = getHumanoid() if hum and hum.Health > 0 and hum.Health < hum.MaxHealth and ShopRemote then if not findHotdog() then pcall(function() ShopRemote:FireServer("Item", "Hotdog") end) end task.wait(0.5) local dog = findHotdog() if dog then if dog.Parent ~= player.Character then dog.Parent = player.Character; task.wait(0.5) end pcall(function() VirtualUser:CaptureController(); VirtualUser:ClickButton1(Vector2.new(0,0)) end) task.wait(2) end end task.wait(0.5) end end) end
-local function startSpeed() speedEnabled = true; task.spawn(function() while speedEnabled do pcall(function() local h = getHumanoid(); if h then h.WalkSpeed = speedValue end end); task.wait(0.1) end) end end
 local function stopSpeed() speedEnabled = false; task.wait(0.2); local h = getHumanoid(); if h then h.WalkSpeed = defaultSpeed end end
 
 local FARM_POS = Vector3.new(486.707275390625, 15.999999046325684, -233.35446166992188)
@@ -205,107 +122,128 @@ local function startAutoFarm()
 end
 local function stopAutoFarm() autoFarmEnabled = false; task.wait(0.2); local h = getHumanoid(); if h then h.WalkSpeed = defaultSpeed end end
 
-local moneyGui, moneyLabel, moneyStart = nil, nil, 0
-local function startMoneyCounter()
-    if moneyCounterEnabled then return end
-    moneyCounterEnabled = true
-    if moneyGui then moneyGui:Destroy() end
-    moneyGui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
-    local f = Instance.new("Frame", moneyGui)
-    f.Size, f.Position = UDim2.new(0, 200, 0, 60), UDim2.new(0, 20, 0, 100)
-    f.BackgroundColor3, f.BackgroundTransparency = Color3.new(0,0,0), 0.3
-    f.Active, f.Draggable = true, true
-    local s = Instance.new("UIStroke", f); s.Color = Color3.fromRGB(0, 255, 100)
-    moneyLabel = Instance.new("TextLabel", f)
-    moneyLabel.Size, moneyLabel.BackgroundTransparency = UDim2.new(1,0,1,0), 1
-    moneyLabel.TextColor3, moneyLabel.Font, moneyLabel.TextScaled = Color3.fromRGB(0,255,100), Enum.Font.Code, true
-    local ls = player:FindFirstChild("leaderstats")
-    local bal = ls and ls:FindFirstChild("Buckarooms")
-    if bal then
-        moneyStart = bal.Value
-        moneyLabel.Text = "+0 | $" .. math.floor(bal.Value)
-        bal:GetPropertyChangedSignal("Value"):Connect(function()
-            local diff = math.max(0, bal.Value - moneyStart)
-            moneyLabel.Text = "+" .. math.floor(diff) .. " | $" .. math.floor(bal.Value)
-        end)
-    end
+-- ============================================================
+-- БУМБОКС
+-- ============================================================
+local Boombox = { sound = nil, volume = 0.5, loop = false }
+local function tryPlayBoombox(idText)
+    if not idText or idText == "" then return false, "Пустой ID" end
+    local id = idText:gsub("%s+", "")
+    if not id:find("rbxassetid://") then id = "rbxassetid://" .. (id:match("(%d+)") or id) end
+    if not Boombox.sound then Boombox.sound = Instance.new("Sound", SoundService) end
+    local s = Boombox.sound
+    s:Stop(); s.SoundId = id; s.Volume = Boombox.volume; s.Looped = Boombox.loop
+    pcall(function() game:GetService("ContentProvider"):PreloadAsync({s}) end)
+    local waited = 0
+    while waited < 3 and not (s.IsLoaded and s.TimeLength > 0) do task.wait(0.1); waited = waited + 0.1 end
+    if s.IsLoaded and s.TimeLength > 0 then s:Play(); return true, "успешно!" else s:Stop(); s.SoundId = ""; return false, "заблокирован" end
 end
-local function stopMoneyCounter() moneyCounterEnabled = false; if moneyGui then moneyGui:Destroy(); moneyGui = nil end end
 
-local pColor, nColor = Color3.fromRGB(0, 255, 100), Color3.fromRGB(255, 50, 50)
-local hlBag = {}
-local function addHl(obj, col) if not obj or hlBag[obj] then return end local h = Instance.new("Highlight", obj); h.FillColor, h.OutlineColor = col, col; h.FillTransparency, h.DepthMode = 0.5, Enum.HighlightDepthMode.AlwaysOnTop; hlBag[obj] = h end
-local function startEsp()
-    if espEnabled then return end
-    espEnabled = true
-    task.spawn(function()
-        while espEnabled do
-            for _, p in ipairs(Players:GetPlayers()) do if p ~= player and p.Character then addHl(p.Character, pColor) end end
-            local live = workspace:FindFirstChild("LiveAI")
-            if live then for _, m in ipairs(live:GetChildren()) do if m:IsA("Model") then addHl(m, nColor) end end end
-            task.wait(1)
+-- ============================================================
+-- INSTANT PP & DOORS
+-- ============================================================
+local function applyInstantPP()
+    local count = 0
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("ProximityPrompt") then
+            obj.HoldDuration = 0
+            count = count + 1
         end
-    end)
+    end
+    if count > 0 then Rayfield:Notify({Title = "InstantPP", Content = "Установлено для " .. count .. " дверей", Duration = 2}) end
 end
-local function stopEsp() espEnabled = false; for o, h in pairs(hlBag) do h:Destroy() end; hlBag = {} end
 
-local function startItemEsp()
-    if itemEspEnabled then return end
-    itemEspEnabled = true
-    task.spawn(function()
-        while itemEspEnabled do
-            local sys = workspace:FindFirstChild("System")
-            local sp = sys and sys:FindFirstChild("Spawners")
-            if sp then
-                for _, obj in ipairs(sp:GetDescendants()) do
-                    if obj:IsA("BasePart") and obj.Name == "Item" and not obj:FindFirstChild("NK3Y_ItemBB") then
-                        local bb = Instance.new("BillboardGui", obj)
-                        bb.Name, bb.Size, bb.AlwaysOnTop = "NK3Y_ItemBB", UDim2.new(0,100,0,30), true
-                        local t = Instance.new("TextLabel", bb)
-                        t.Size, t.BackgroundTransparency = UDim2.new(1,0,1,0), 1
-                        t.Text, t.TextColor3, t.TextScaled = obj.Parent.Name, Color3.fromRGB(255,255,0), true
-                        t.Font = Enum.Font.Code
+local function startDoorFarm()
+    if doorFarmEnabled then return end
+    doorFarmEnabled = true
+    applyInstantPP()
+    
+    doorFarmThread = task.spawn(function()
+        while doorFarmEnabled do
+            pcall(function()
+                local char = player.Character
+                local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    local nearest, nearestDist = nil, math.huge
+                    for _, obj in ipairs(workspace:GetDescendants()) do
+                        if obj:IsA("Model") or obj:IsA("BasePart") then
+                            local name = string.lower(obj.Name)
+                            local hasPrompt = obj:FindFirstChildWhichIsA("ProximityPrompt")
+                            if name:find("door") or name:find("gate") or hasPrompt then
+                                local part = obj:IsA("BasePart") and obj or obj:FindFirstChildWhichIsA("BasePart")
+                                if part and part.Parent then
+                                    local dist = (part.Position - hrp.Position).Magnitude
+                                    if dist < nearestDist then
+                                        nearest = part
+                                        nearestDist = dist
+                                    end
+                                end
+                            end
+                        end
+                    end
+                    if nearest then
+                        hrp.CFrame = CFrame.new(nearest.Position + Vector3.new(0, 3, 0))
+                        task.wait(doorDelay)
                     end
                 end
-            end
-            task.wait(2)
+            end)
+            task.wait(0.5)
         end
     end)
 end
-local function stopItemEsp() itemEspEnabled = false; for _, obj in ipairs(workspace:GetDescendants()) do if obj.Name == "NK3Y_ItemBB" then obj:Destroy() end end end
+
+local function stopDoorFarm()
+    doorFarmEnabled = false
+    if doorFarmThread then task.cancel(doorFarmThread); doorFarmThread = nil end
+end
 
 -- ============================================================
--- ОКНО
+-- СОЗДАНИЕ ОКНА (С ЗАЩИТОЙ ОТ ОШИБОК)
 -- ============================================================
-local Window = Rayfield:CreateWindow({
-    Name = T("window_title"), LoadingTitle = T("loading_title"), LoadingSubtitle = T("loading_subtitle"),
-    Theme = {
-        TextColor = Color3.fromRGB(0, 255, 100), Background = Color3.fromRGB(0, 0, 0), Topbar = Color3.fromRGB(5, 5, 5),
-        Shadow = Color3.fromRGB(0, 10, 0), NotificationBackground = Color3.fromRGB(0, 20, 5), NotificationActionsBackground = Color3.fromRGB(0, 40, 15),
-        TabBackground = Color3.fromRGB(0, 20, 0), TabStroke = Color3.fromRGB(0, 255, 100), TabBackgroundSelected = Color3.fromRGB(0, 80, 30),
-        TabTextColor = Color3.fromRGB(0, 200, 80), SelectedTabTextColor = Color3.fromRGB(0, 255, 100),
-        ElementBackground = Color3.fromRGB(5, 15, 5), ElementBackgroundHover = Color3.fromRGB(0, 40, 15), SecondaryElementBackground = Color3.fromRGB(0, 10, 0),
-        ElementStroke = Color3.fromRGB(0, 200, 80), SecondaryElementStroke = Color3.fromRGB(0, 100, 40),
-        SliderBackground = Color3.fromRGB(0, 50, 20), SliderProgress = Color3.fromRGB(0, 255, 100), SliderStroke = Color3.fromRGB(0, 255, 100),
-        ToggleBackground = Color3.fromRGB(0, 30, 10), ToggleEnabled = Color3.fromRGB(0, 255, 100), ToggleDisabled = Color3.fromRGB(40, 40, 40),
-        ToggleEnabledStroke = Color3.fromRGB(0, 255, 100), ToggleDisabledStroke = Color3.fromRGB(80, 80, 80), ToggleEnabledOuterStroke = Color3.fromRGB(0, 150, 60),
-        ToggleDisabledOuterStroke = Color3.fromRGB(60, 60, 60), DropdownSelected = Color3.fromRGB(0, 40, 15), DropdownUnselected = Color3.fromRGB(0, 20, 5),
-        InputBackground = Color3.fromRGB(5, 10, 5), InputStroke = Color3.fromRGB(0, 180, 70), PlaceholderColor = Color3.fromRGB(0, 100, 40)
-    },
-    ConfigurationSaving = { Enabled = false }
-})
+local success, Window = pcall(function()
+    return Rayfield:CreateWindow({
+        Name = T("window_title"), LoadingTitle = T("loading_title"), LoadingSubtitle = T("loading_subtitle"),
+        Theme = {
+            TextColor = Color3.fromRGB(0, 255, 100), Background = Color3.fromRGB(0, 0, 0), Topbar = Color3.fromRGB(5, 5, 5),
+            Shadow = Color3.fromRGB(0, 10, 0), NotificationBackground = Color3.fromRGB(0, 20, 5), NotificationActionsBackground = Color3.fromRGB(0, 40, 15),
+            TabBackground = Color3.fromRGB(0, 20, 0), TabStroke = Color3.fromRGB(0, 255, 100), TabBackgroundSelected = Color3.fromRGB(0, 80, 30),
+            TabTextColor = Color3.fromRGB(0, 200, 80), SelectedTabTextColor = Color3.fromRGB(0, 255, 100),
+            ElementBackground = Color3.fromRGB(5, 15, 5), ElementBackgroundHover = Color3.fromRGB(0, 40, 15), SecondaryElementBackground = Color3.fromRGB(0, 10, 0),
+            ElementStroke = Color3.fromRGB(0, 200, 80), SecondaryElementStroke = Color3.fromRGB(0, 100, 40),
+            SliderBackground = Color3.fromRGB(0, 50, 20), SliderProgress = Color3.fromRGB(0, 255, 100), SliderStroke = Color3.fromRGB(0, 255, 100),
+            ToggleBackground = Color3.fromRGB(0, 30, 10), ToggleEnabled = Color3.fromRGB(0, 255, 100), ToggleDisabled = Color3.fromRGB(40, 40, 40),
+            ToggleEnabledStroke = Color3.fromRGB(0, 255, 100), ToggleDisabledStroke = Color3.fromRGB(80, 80, 80), ToggleEnabledOuterStroke = Color3.fromRGB(0, 150, 60),
+            ToggleDisabledOuterStroke = Color3.fromRGB(60, 60, 60), DropdownSelected = Color3.fromRGB(0, 40, 15), DropdownUnselected = Color3.fromRGB(0, 20, 5),
+            InputBackground = Color3.fromRGB(5, 10, 5), InputStroke = Color3.fromRGB(0, 180, 70), PlaceholderColor = Color3.fromRGB(0, 100, 40)
+        },
+        ConfigurationSaving = { Enabled = false }
+    })
+end)
 
+if not success or not Window then
+    warn("[NK3Y] Ошибка создания окна Rayfield: " .. tostring(Window))
+    return
+end
+
+-- ============================================================
+-- ВКЛАДКИ
+-- ============================================================
 local MainTab = Window:CreateTab(T("tab_main"), 4483362458)
 local VisualsTab = Window:CreateTab(T("tab_visuals"), 4483362458)
 local DoorsTab = Window:CreateTab(T("tab_doors"), 4483362458)
 local BoomboxTab = Window:CreateTab(T("tab_boombox"), 4483362458)
 local InfoTab = Window:CreateTab(T("tab_info"), 4483362458)
 
--- ===== ВКЛАДКА ДВЕРИ =====
+-- ===== ОСНОВНОЕ =====
+MainTab:CreateSection("Автоматизация")
+MainTab:CreateToggle({Name = T("auto_farm"), CurrentValue = false, Callback = function(v) if v then startAutoFarm() else stopAutoFarm() end end})
+MainTab:CreateToggle({Name = T("auto_hotdog"), CurrentValue = false, Callback = function(v) if v then startAutoHotdog() else autoHotdogEnabled = false end end})
+MainTab:CreateToggle({Name = T("speed_hack"), CurrentValue = false, Callback = function(v) if v then startSpeed() else stopSpeed() end end})
+MainTab:CreateSlider({Name = T("speed_value"), Range = {16, 300}, Increment = 1, CurrentValue = speedValue, Callback = function(v) speedValue = v end})
+
+-- ===== ДВЕРИ =====
 DoorsTab:CreateSection("Автофарм дверей")
-DoorsTab:CreateToggle({Name = T("door_farm"), CurrentValue = false, Callback = function(v)
-    if v then startDoorFarm() else stopDoorFarm() end
-end})
+DoorsTab:CreateToggle({Name = T("door_farm"), CurrentValue = false, Callback = function(v) if v then startDoorFarm() else stopDoorFarm() end end})
 DoorsTab:CreateSlider({Name = T("door_delay"), Range = {0.5, 5}, Increment = 0.5, CurrentValue = doorDelay, Callback = function(v) doorDelay = v end})
 DoorsTab:CreateButton({Name = "Принудительно включить InstantPP", Callback = function() applyInstantPP() end})
 
@@ -326,17 +264,28 @@ BoomboxTab:CreateToggle({Name = "Повтор (loop)", CurrentValue = false, Cal
 InfoTab:CreateSection("Информация")
 InfoTab:CreateButton({Name = "Твой ключ: " .. string.sub(tostring(userKey), 1, 8) .. "***", Callback = function() end})
 
--- ===== ОСНОВНОЕ =====
-MainTab:CreateSection("Автоматизация")
-MainTab:CreateToggle({Name = T("auto_farm"), CurrentValue = false, Callback = function(v) if v then startAutoFarm() else stopAutoFarm() end end})
-MainTab:CreateToggle({Name = T("auto_hotdog"), CurrentValue = false, Callback = function(v) if v then startAutoHotdog() else autoHotdogEnabled = false end end})
-MainTab:CreateToggle({Name = T("speed_hack"), CurrentValue = false, Callback = function(v) if v then startSpeed() else stopSpeed() end end})
-MainTab:CreateSlider({Name = T("speed_value"), Range = {16, 300}, Increment = 1, CurrentValue = speedValue, Callback = function(v) speedValue = v end})
-MainTab:CreateToggle({Name = T("money_counter"), CurrentValue = false, Callback = function(v) if v then startMoneyCounter() else stopMoneyCounter() end end})
+-- ===== ESP =====
+local function startEsp()
+    espEnabled = true
+    local hlBag = {}
+    task.spawn(function()
+        while espEnabled do
+            for _, p in ipairs(Players:GetPlayers()) do 
+                if p ~= player and p.Character and not hlBag[p.Character] then 
+                    local h = Instance.new("Highlight", p.Character)
+                    h.FillColor, h.OutlineColor = Color3.fromRGB(0, 255, 100), Color3.fromRGB(0, 255, 100)
+                    h.FillTransparency, h.DepthMode = 0.5, Enum.HighlightDepthMode.AlwaysOnTop
+                    hlBag[p.Character] = h
+                end 
+            end
+            task.wait(1)
+        end
+    end)
+end
 
--- ===== ВИЗУАЛ =====
 VisualsTab:CreateSection("ESP")
-VisualsTab:CreateToggle({Name = T("player_esp"), CurrentValue = false, Callback = function(v) if v then startEsp() else stopEsp() end end})
-VisualsTab:CreateToggle({Name = T("item_esp"), CurrentValue = false, Callback = function(v) if v then startItemEsp() else stopItemEsp() end end})
+VisualsTab:CreateToggle({Name = T("player_esp"), CurrentValue = false, Callback = function(v) 
+    if v then startEsp() else espEnabled = false end 
+end})
 
 Rayfield:Notify({Title = T("window_title"), Content = T("notify_loaded"), Duration = 5})
