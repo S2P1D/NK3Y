@@ -1,5 +1,5 @@
 -- ============================================================
--- NK3Y Bahkruums (Auto-Open Doors + Safe UI)
+-- NK3Y Bahkruums (Auto-Open Doors + Safe UI) v3.6
 -- ============================================================
 
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
@@ -110,29 +110,45 @@ local function startAutoHotdog()
     end)
 end
 
--- АВТОФАРМ ДВЕРЕЙ С АВТООТКРЫТИЕМ
+-- ============================================================
+-- АВТОФАРМ ДВЕРЕЙ С АВТООТКРЫТИЕМ (ИСПРАВЛЕНО)
+-- ============================================================
 local doorFarmEnabled = false
 local doorDelay = 1.0
 local ignoredDoors = {}
 
+-- Универсальная функция активации промпта: fireproximityprompt + fallback
+local function activatePrompt(prompt)
+    if not prompt or not prompt:IsA("ProximityPrompt") then return false end
+    -- Основной способ (executor) — обходит дистанцию/удержание/Enabled
+    local ok = pcall(function() fireproximityprompt(prompt) end)
+    if ok then return true end
+    -- Запасной способ — эмуляция удержания
+    pcall(function()
+        local oldHold = prompt.HoldDuration
+        prompt.HoldDuration = 0
+        prompt:InputHoldBegin()
+        task.wait(0.05)
+        prompt:InputHoldEnd()
+        prompt.HoldDuration = oldHold
+    end)
+    return false
+end
+
 local function startDoorFarm()
     if doorFarmEnabled then return end
     doorFarmEnabled = true
-    
-    -- Врубаем Instant PP для всех кнопок в игре
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("ProximityPrompt") then obj.HoldDuration = 0 end
-    end
-    
+
     task.spawn(function()
         while doorFarmEnabled do
+            -- Собираем все двери
             local doors = {}
             for _, obj in ipairs(workspace:GetDescendants()) do
                 if obj:IsA("Model") and string.lower(obj.Name) == "halloween door" then
                     table.insert(doors, {model = obj, pos = obj:GetPivot().Position})
                 end
             end
-            
+
             -- Чистим игнор
             for model, time in pairs(ignoredDoors) do
                 if tick() - time > 5 or not model.Parent then ignoredDoors[model] = nil end
@@ -140,7 +156,7 @@ local function startDoorFarm()
 
             local char = player.Character
             local hrp = char and char:FindFirstChild("HumanoidRootPart")
-            
+
             if #doors > 0 and hrp then
                 local nearest, nearestDist = nil, math.huge
                 for _, door in ipairs(doors) do
@@ -149,8 +165,8 @@ local function startDoorFarm()
                         if dist < nearestDist then nearest = door; nearestDist = dist end
                     end
                 end
-                
-                -- Если все в игноре
+
+                -- Если все в игноре — берём ближайшую всё равно
                 if not nearest then
                     for _, door in ipairs(doors) do
                         local dist = (door.pos - hrp.Position).Magnitude
@@ -161,18 +177,29 @@ local function startDoorFarm()
                 if nearest then
                     -- ТП к двери
                     hrp.CFrame = CFrame.new(nearest.pos + Vector3.new(0, 3, 0))
-                    
-                    -- Ждем чуть-чуть, чтобы прогрузились хитбоксы
-                    task.wait(0.1)
-                    
-                    -- Ищем кнопку внутри двери и нажимаем её
-                    local prompt = nearest.model:FindFirstChildWhichIsA("ProximityPrompt", true)
-                    if prompt then
-                        pcall(function()
-                            prompt:InputHoldBegin()
-                            task.wait(0.05)
-                            prompt:InputHoldEnd()
-                        end)
+                    task.wait(0.15) -- даём прогрузиться
+
+                    -- Ищем все промпты внутри модели двери (рекурсивно)
+                    local prompts = {}
+                    for _, d in ipairs(nearest.model:GetDescendants()) do
+                        if d:IsA("ProximityPrompt") then
+                            table.insert(prompts, d)
+                        end
+                    end
+
+                    if #prompts > 0 then
+                        for _, prompt in ipairs(prompts) do
+                            if prompt.Enabled then
+                                activatePrompt(prompt)
+                                task.wait(0.05)
+                            end
+                        end
+                    else
+                        -- Иногда вместо ProximityPrompt используют ClickDetector
+                        local cd = nearest.model:FindFirstChildWhichIsA("ClickDetector", true)
+                        if cd then
+                            pcall(function() fireclickdetector(cd) end)
+                        end
                     end
 
                     ignoredDoors[nearest.model] = tick()
@@ -227,6 +254,7 @@ DoorsTab:CreateButton({Name = "Врубить InstantPP (мгновенно)", C
     for _, obj in ipairs(workspace:GetDescendants()) do
         if obj:IsA("ProximityPrompt") then 
             obj.HoldDuration = 0 
+            obj.Enabled = true
             count = count + 1
         end
     end
@@ -250,4 +278,4 @@ BoomboxTab:CreateToggle({Name = "Повтор (loop)", CurrentValue = false, Cal
 InfoTab:CreateSection("Информация")
 InfoTab:CreateButton({Name = "Твой ключ: " .. string.sub(tostring(userKey), 1, 8) .. "***", Callback = function() end})
 
-Rayfield:Notify({Title = "NK3Y Bahkruums", Content = "Загружен. by NK3Y", Duration = 5})
+Rayfield:Notify({Title = "NK3Y Bahkruums", Content = "Загружен. by NK3Y v3.6", Duration = 5})
