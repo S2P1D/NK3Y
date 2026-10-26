@@ -1,5 +1,5 @@
 -- ============================================================
--- NK3Y Bahkruums + Door Farm + InstantPP
+-- NK3Y Bahkruums (Safe UI + Door Farm + InstantPP)
 -- ============================================================
 
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
@@ -10,24 +10,20 @@ local VirtualUser = game:GetService("VirtualUser")
 local SoundService = game:GetService("SoundService")
 
 local player = Players.LocalPlayer
+local userKey = getgenv().NK3Y_Key or "Unknown"
 
 -- ============================================================
--- БЛОК КЛЮЧА
+-- БЕЗОПАСНАЯ ЗАГРУЗКА REMOTES (В ФОНЕ)
 -- ============================================================
-local userKey = getgenv().NK3Y_Key or (isfile("NK3Y_HUB_KEY.txt") and readfile("NK3Y_HUB_KEY.txt") or "Unknown")
-local OWNER_HASH = 1574169149
-local function djb2(str) local h = 5381 for i=1,#str do h=(h*33+string.byte(str,i))%4294967296 end return h end
-local function fetchKeyInfo(key)
-    if djb2(key) == OWNER_HASH then return "Бессрочный (Владелец)\nЛимит HWID: Безлимит" end
-    local url = "https://pandadevelopment.net/v2_keyinfo?service=nk3yhub&hwid=" .. tostring(player.UserId) .. "&key=" .. key
-    local success, response = pcall(function() return game:HttpGet(url, true) end)
-    if not success or not response then return "Ошибка соединения." end
-    local ok, data = pcall(function() return HttpService:JSONDecode(response) end)
-    if not ok or not data or not data.Key_Information then return "Ошибка данных." end
-    local info = data.Key_Information
-    local exp = info.Days_Left and (info.Days_Left .. " дн.") or "Бессрочный"
-    return string.format("Время: %s\nHWID: %s / %s", exp, info.HWID_Usage or "?", info.HWID_Limit or "?")
-end
+local ShopRemote, BhopRemote
+task.spawn(function()
+    pcall(function()
+        ShopRemote = game.ReplicatedStorage:WaitForChild("Assets", 5):WaitForChild("Remotes", 5):WaitForChild("Shop", 5)
+    end)
+    pcall(function()
+        BhopRemote = game.ReplicatedStorage:WaitForChild("Assets", 5):WaitForChild("Remotes", 5):WaitForChild("Player", 5):WaitForChild("Bhop", 5)
+    end)
+end)
 
 -- ============================================================
 -- БУМБОКС
@@ -52,11 +48,11 @@ end
 local Locales = {
     ru = {
         window_title = "NK3Y Bahkruums", loading_title = "Загрузка...", loading_subtitle = "by NK3Y",
-        tab_main = "Основное", tab_visuals = "Визуал", tab_doors = "Двери", tab_boombox = "Бумбокс", tab_info = "Ключ / Инфо", tab_settings = "Настройки",
+        tab_main = "Основное", tab_visuals = "Визуал", tab_doors = "Двери", tab_boombox = "Бумбокс", tab_info = "Инфо",
         auto_hotdog = "Авто-хил хот-догами", speed_hack = "Speed Hack", speed_value = "Скорость",
         auto_farm = "Автофарм (BHOP + деньги)", anti_afk = "Anti-AFK", nextbot_esp = "ESP некстботов",
-        player_esp = "ESP игроков", item_esp = "ESP предметов", auto_tp = "Auto-TP к предметам",
-        money_counter = "Счётчик денег", door_farm = "Автофарм дверей", door_delay = "Задержка у двери (сек)",
+        player_esp = "ESP игроков", item_esp = "ESP предметов", money_counter = "Счётчик денег",
+        door_farm = "Автофарм дверей", door_delay = "Задержка у двери (сек)",
         notify_loaded = "Загружен. by NK3Y"
     }
 }
@@ -74,8 +70,10 @@ local doorFarmEnabled, doorFarmThread = false, nil
 local doorDelay = 1.5
 local instantPPApplied = false
 
+local function getHumanoid() local c = player.Character; return c and c:FindFirstChildOfClass("Humanoid") end
+
 -- ============================================================
--- INSTANT PP (МГНОВЕННОЕ ОТКРЫТИЕ ДВЕРЕЙ)
+-- INSTANT PP
 -- ============================================================
 local function applyInstantPP()
     local count = 0
@@ -105,18 +103,16 @@ local function maintainInstantPP()
 end
 
 -- ============================================================
--- ПОИСК ДВЕРЕЙ
+-- ПОИСК ДВЕРЕЙ И АВТОФАРМ
 -- ============================================================
 local function findDoors()
     local doors = {}
     for _, obj in ipairs(workspace:GetDescendants()) do
         if obj:IsA("Model") or obj:IsA("BasePart") then
             local name = string.lower(obj.Name)
-            if name:find("door") or name:find("gate") or name:find("дверь") then
+            if name:find("door") or name:find("gate") then
                 local part = obj:IsA("BasePart") and obj or obj:FindFirstChildWhichIsA("BasePart")
-                if part then
-                    table.insert(doors, part)
-                end
+                if part then table.insert(doors, part) end
             else
                 local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt")
                 if prompt then
@@ -129,27 +125,6 @@ local function findDoors()
     return doors
 end
 
-local function getNearestDoor()
-    local char = player.Character
-    local hrp = char and char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return nil, nil end
-    local doors = findDoors()
-    local nearest, nearestDist = nil, math.huge
-    for _, part in ipairs(doors) do
-        if part and part.Parent then
-            local dist = (part.Position - hrp.Position).Magnitude
-            if dist < nearestDist then
-                nearest = part
-                nearestDist = dist
-            end
-        end
-    end
-    return nearest, nearestDist
-end
-
--- ============================================================
--- АВТОФАРМ ДВЕРЕЙ
--- ============================================================
 local function startDoorFarm()
     if doorFarmEnabled then return end
     doorFarmEnabled = true
@@ -161,12 +136,22 @@ local function startDoorFarm()
     
     doorFarmThread = task.spawn(function()
         while doorFarmEnabled do
-            local door, dist = getNearestDoor()
-            if door then
-                local char = player.Character
-                local hrp = char and char:FindFirstChild("HumanoidRootPart")
-                if hrp then
-                    hrp.CFrame = CFrame.new(door.Position + Vector3.new(0, 3, 0))
+            local char = player.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                local doors = findDoors()
+                local nearest, nearestDist = nil, math.huge
+                for _, part in ipairs(doors) do
+                    if part and part.Parent then
+                        local dist = (part.Position - hrp.Position).Magnitude
+                        if dist < nearestDist then
+                            nearest = part
+                            nearestDist = dist
+                        end
+                    end
+                end
+                if nearest then
+                    hrp.CFrame = CFrame.new(nearest.Position + Vector3.new(0, 3, 0))
                     task.wait(doorDelay)
                 end
             end
@@ -185,16 +170,13 @@ local function stopDoorFarm()
 end
 
 -- ============================================================
--- СТАРЫЕ ФУНКЦИИ (ХОТДОГИ, СПИД, АВТОФАРМ, ESP)
+-- СТАРЫЕ ФУНКЦИИ
 -- ============================================================
-local ShopRemote = game.ReplicatedStorage:WaitForChild("Assets"):WaitForChild("Remotes"):WaitForChild("Shop")
-local function getHumanoid() local c = player.Character; return c and c:FindFirstChildOfClass("Humanoid") end
 local function findHotdog() local b = player:FindFirstChild("Backpack"); return (b and b:FindFirstChild("Hotdog")) or (player.Character and player.Character:FindFirstChild("Hotdog")) end
-local function startAutoHotdog() if autoHotdogEnabled then return end autoHotdogEnabled = true task.spawn(function() while autoHotdogEnabled do local hum = getHumanoid() if hum and hum.Health > 0 and hum.Health < hum.MaxHealth then if not findHotdog() then pcall(function() ShopRemote:FireServer("Item", "Hotdog") end) end task.wait(0.5) local dog = findHotdog() if dog then if dog.Parent ~= player.Character then dog.Parent = player.Character; task.wait(0.5) end pcall(function() VirtualUser:CaptureController(); VirtualUser:ClickButton1(Vector2.new(0,0)) end) task.wait(2) end end task.wait(0.5) end end) end
+local function startAutoHotdog() if autoHotdogEnabled then return end autoHotdogEnabled = true task.spawn(function() while autoHotdogEnabled do local hum = getHumanoid() if hum and hum.Health > 0 and hum.Health < hum.MaxHealth and ShopRemote then if not findHotdog() then pcall(function() ShopRemote:FireServer("Item", "Hotdog") end) end task.wait(0.5) local dog = findHotdog() if dog then if dog.Parent ~= player.Character then dog.Parent = player.Character; task.wait(0.5) end pcall(function() VirtualUser:CaptureController(); VirtualUser:ClickButton1(Vector2.new(0,0)) end) task.wait(2) end end task.wait(0.5) end end) end
 local function startSpeed() speedEnabled = true; task.spawn(function() while speedEnabled do pcall(function() local h = getHumanoid(); if h then h.WalkSpeed = speedValue end end); task.wait(0.1) end) end end
 local function stopSpeed() speedEnabled = false; task.wait(0.2); local h = getHumanoid(); if h then h.WalkSpeed = defaultSpeed end end
 
-local BhopRemote = game.ReplicatedStorage:WaitForChild("Assets"):WaitForChild("Remotes"):WaitForChild("Player"):WaitForChild("Bhop")
 local FARM_POS = Vector3.new(486.707275390625, 15.999999046325684, -233.35446166992188)
 local function startAutoFarm()
     if autoFarmEnabled then return end
@@ -318,7 +300,6 @@ local VisualsTab = Window:CreateTab(T("tab_visuals"), 4483362458)
 local DoorsTab = Window:CreateTab(T("tab_doors"), 4483362458)
 local BoomboxTab = Window:CreateTab(T("tab_boombox"), 4483362458)
 local InfoTab = Window:CreateTab(T("tab_info"), 4483362458)
-local SettingsTab = Window:CreateTab(T("tab_settings"), 4483362458)
 
 -- ===== ВКЛАДКА ДВЕРИ =====
 DoorsTab:CreateSection("Автофарм дверей")
@@ -326,9 +307,7 @@ DoorsTab:CreateToggle({Name = T("door_farm"), CurrentValue = false, Callback = f
     if v then startDoorFarm() else stopDoorFarm() end
 end})
 DoorsTab:CreateSlider({Name = T("door_delay"), Range = {0.5, 5}, Increment = 0.5, CurrentValue = doorDelay, Callback = function(v) doorDelay = v end})
-DoorsTab:CreateButton({Name = "Принудительно включить InstantPP", Callback = function()
-    applyInstantPP()
-end})
+DoorsTab:CreateButton({Name = "Принудительно включить InstantPP", Callback = function() applyInstantPP() end})
 
 -- ===== БУМБОКС =====
 local trackInput
@@ -343,16 +322,9 @@ BoomboxTab:CreateButton({Name = "⏹ Стоп", Callback = function() if Boombox
 BoomboxTab:CreateSlider({Name = "Громкость", Range = {0, 100}, Increment = 5, CurrentValue = 50, Callback = function(v) Boombox.volume = v / 100; if Boombox.sound then Boombox.sound.Volume = Boombox.volume end end})
 BoomboxTab:CreateToggle({Name = "Повтор (loop)", CurrentValue = false, Callback = function(v) Boombox.loop = v; if Boombox.sound then Boombox.sound.Looped = v end end})
 
--- ===== КЛЮЧ / ИНФО =====
-InfoTab:CreateSection("Информация о ключе")
+-- ===== ИНФО =====
+InfoTab:CreateSection("Информация")
 InfoTab:CreateButton({Name = "Твой ключ: " .. string.sub(tostring(userKey), 1, 8) .. "***", Callback = function() end})
-InfoTab:CreateButton({Name = "Узнать время и HWID", Callback = function()
-    Rayfield:Notify({Title = "Pandauth", Content = "Запрос данных...", Duration = 2})
-    task.spawn(function()
-        local info = fetchKeyInfo(userKey)
-        for line in info:gmatch("[^\r\n]+") do Rayfield:Notify({Title = "Инфо", Content = line, Duration = 5}); task.wait(0.3) end
-    end)
-end})
 
 -- ===== ОСНОВНОЕ =====
 MainTab:CreateSection("Автоматизация")
@@ -366,11 +338,5 @@ MainTab:CreateToggle({Name = T("money_counter"), CurrentValue = false, Callback 
 VisualsTab:CreateSection("ESP")
 VisualsTab:CreateToggle({Name = T("player_esp"), CurrentValue = false, Callback = function(v) if v then startEsp() else stopEsp() end end})
 VisualsTab:CreateToggle({Name = T("item_esp"), CurrentValue = false, Callback = function(v) if v then startItemEsp() else stopItemEsp() end end})
-
--- ===== НАСТРОЙКИ =====
-SettingsTab:CreateSection("Разное")
-SettingsTab:CreateToggle({Name = T("anti_afk"), CurrentValue = false, Callback = function(v)
-    if v then player.Idled:Connect(function() VirtualUser:CaptureController(); VirtualUser:ClickButton2(Vector2.new()) end) end
-end})
 
 Rayfield:Notify({Title = T("window_title"), Content = T("notify_loaded"), Duration = 5})
