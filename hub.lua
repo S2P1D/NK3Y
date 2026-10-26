@@ -1,5 +1,5 @@
 -- ============================================================
--- NK3Y HUB - GitHub keys.json Key System
+-- NK3Y HUB - Clean Keys.json System + Auto-Execute
 -- ============================================================
 
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
@@ -42,21 +42,19 @@ local function applyScaleFix(scale)
 end
 
 -- ============================================================
--- СИСТЕМА КЛЮЧЕЙ (GitHub JSON)
+-- СИСТЕМА КЛЮЧЕЙ (GitHub keys.json)
 -- ============================================================
 local OWNER_HASH = 1574169149 -- Твой ключ NK3Y_OWNER_2026
 
 local function djb2(str)
     local h = 5381
-    for i = 1, #str do
-        h = (h * 33 + string.byte(str, i)) % 4294967296
-    end
+    for i = 1, #str do h = (h * 33 + string.byte(str, i)) % 4294967296 end
     return h
 end
 
 local function checkRemoteKey(key)
     local success, response = pcall(function()
-        return game:HttpGet(KEYS_URL .. "?t=" .. tick(), true) -- ?t=... чтобы не кэшировало
+        return game:HttpGet(KEYS_URL .. "?t=" .. tick(), true)
     end)
     if not success or not response then return false, "Ошибка загрузки keys.json" end
     
@@ -65,10 +63,8 @@ local function checkRemoteKey(key)
     
     for _, entry in ipairs(data.user_keys) do
         if entry.key == key then
-            if entry.expires then
-                if os.time() > entry.expires then
-                    return false, "Ключ истёк"
-                end
+            if entry.expires and os.time() > entry.expires then
+                return false, "Ключ истёк"
             end
             return true, "OK"
         end
@@ -84,25 +80,15 @@ local function validateKey(key)
     return false, msg, nil
 end
 
--- Инфо о ключе (парсим дату из JSON)
 local function fetchKeyInfo(key)
     if djb2(key) == OWNER_HASH then return "Бессрочный (Владелец)" end
-    
-    local success, response = pcall(function()
-        return game:HttpGet(KEYS_URL .. "?t=" .. tick(), true)
-    end)
+    local success, response = pcall(function() return game:HttpGet(KEYS_URL .. "?t=" .. tick(), true) end)
     if not success or not response then return "Ошибка загрузки keys.json" end
-    
     local ok, data = pcall(function() return HttpService:JSONDecode(response) end)
     if not ok or not data or not data.user_keys then return "Неверный формат" end
-    
     for _, entry in ipairs(data.user_keys) do
         if entry.key == key then
-            if entry.expires then
-                return "Истекает: " .. os.date("%d.%m.%Y %H:%M", entry.expires)
-            else
-                return "Бессрочный"
-            end
+            if entry.expires then return "Истекает: " .. os.date("%d.%m.%Y %H:%M", entry.expires) else return "Бессрочный" end
         end
     end
     return "Ключ не найден"
@@ -116,7 +102,31 @@ local function loadSavedKey() if isfile and isfile(KEY_FILE) then return readfil
 local function saveKey(key) if writefile then writefile(KEY_FILE, key) end end
 
 -- ============================================================
--- ЗВУКИ И БУМБОКС
+-- АВТО-ЗАПУСК
+-- ============================================================
+local autoExecEnabled = true
+
+local function checkAutoExecute(userKey)
+    if not autoExecEnabled then return end
+    local currentId = game.PlaceId
+    
+    if currentId == PLACES.DCYF then
+        Rayfield:Notify({Title = "Auto-Load", Content = "Обнаружен DCYF! Запуск...", Duration = 3})
+        task.wait(1)
+        getgenv().NK3Y_Key = userKey
+        local ok, err = pcall(function() loadstring(game:HttpGet(SCRIPTS.dcyf.url))() end)
+        if not ok then warn("[NK3Y HUB] Ошибка DCYF: " .. tostring(err)) end
+    elseif PLACES.Bahkruums ~= 0 and currentId == PLACES.Bahkruums then
+        Rayfield:Notify({Title = "Auto-Load", Content = "Обнаружен Bahkruums! Запуск...", Duration = 3})
+        task.wait(1)
+        getgenv().NK3Y_Key = userKey
+        local ok, err = pcall(function() loadstring(game:HttpGet(SCRIPTS.bahkruums.url))() end)
+        if not ok then warn("[NK3Y HUB] Ошибка Bahkruums: " .. tostring(err)) end
+    end
+end
+
+-- ============================================================
+-- ЗВУКИ КЛАВИАТУРЫ
 -- ============================================================
 local KB = { enabled = false, volume = 0.4, walkEnabled = true, jumpEnabled = true, landEnabled = true, walkInterval = 0.35, lastWalk = 0, conns = {}, threads = {} }
 local KB_DEFAULT_WALK = "rbxassetid://7494098965"
@@ -170,42 +180,6 @@ local function stopKeyboardSounds()
     for _, c in ipairs(KB.conns) do pcall(function() c:Disconnect() end) end
     for _, t in ipairs(KB.threads) do pcall(function() task.cancel(t) end) end
     KB.conns, KB.threads = {}, {}
-end
-
-local Boombox = { sound = nil, volume = 0.5, loop = false }
-local function normalizeTrackId(text)
-    if not text then return nil end
-    text = text:gsub("%s+", "")
-    if text:find("rbxassetid://") then return text end
-    if text:match("^%d+$") then return "rbxassetid://" .. text end
-    local num = text:match("(%d+)")
-    if num then return "rbxassetid://" .. num end
-    return nil
-end
-
-local function tryPlayBoombox(idText)
-    local id = normalizeTrackId(idText)
-    if not id then return false, "неверный ID" end
-    if not Boombox.sound then Boombox.sound = Instance.new("Sound", SoundService) end
-    local s = Boombox.sound
-    s:Stop(); s.SoundId = id; s.Volume = Boombox.volume; s.Looped = Boombox.loop
-    pcall(function() game:GetService("ContentProvider"):PreloadAsync({s}) end)
-    local waited = 0
-    while waited < 3 and not (s.IsLoaded and s.TimeLength > 0) do task.wait(0.1); waited = waited + 0.1 end
-    if s.IsLoaded and s.TimeLength > 0 then s:Play(); return true, "успешно!" else s:Stop(); s.SoundId = ""; return false, "заблокирован/удалён" end
-end
-
-local function createBoomboxTab(Window)
-    local BTab = Window:CreateTab("Бумбокс", 4483362458)
-    local trackInput
-    BTab:CreateInput({Name = "ID трека", PlaceholderText = "rbxassetid://...", RemoveTextAfterFocusLost = false, Callback = function(t) trackInput = t end})
-    BTab:CreateButton({Name = "▶ Воспроизвести", Callback = function()
-        if not trackInput then return end
-        Rayfield:Notify({Title = "Бумбокс", Content = "Загрузка...", Duration = 2})
-        task.spawn(function() local ok, msg = tryPlayBoombox(trackInput); Rayfield:Notify({Title = "Бумбокс", Content = (ok and "✓ " or "✗ ") .. msg, Duration = 4}) end)
-    end})
-    BTab:CreateButton({Name = "⏹ Стоп", Callback = function() if Boombox.sound then Boombox.sound:Stop() end end})
-    BTab:CreateSlider({Name = "Громкость", Range = {0, 100}, Increment = 5, CurrentValue = 50, Callback = function(v) Boombox.volume = v / 100; if Boombox.sound then Boombox.sound.Volume = Boombox.volume end end})
 end
 
 -- ============================================================
@@ -291,13 +265,28 @@ local function showHubMenu(userKey, userData)
     MainTab:CreateSection("DCYF")
     MainTab:CreateButton({Name = "Загрузить " .. SCRIPTS.dcyf.name, Callback = function()
         Rayfield:Notify({Title = "Загрузка", Content = SCRIPTS.dcyf.name, Duration = 3})
-        task.spawn(function() getgenv().NK3Y_Key = userKey; pcall(function() loadstring(game:HttpGet(SCRIPTS.dcyf.url))() end); createBoomboxTab(Window) end)
+        task.spawn(function() 
+            getgenv().NK3Y_Key = userKey
+            local ok, err = pcall(function() loadstring(game:HttpGet(SCRIPTS.dcyf.url))() end)
+            if not ok then warn("[NK3Y HUB] Ошибка DCYF: " .. tostring(err)) end
+        end)
     end})
 
     MainTab:CreateSection("Bahkruums")
     MainTab:CreateButton({Name = "Загрузить " .. SCRIPTS.bahkruums.name, Callback = function()
         Rayfield:Notify({Title = "Загрузка", Content = SCRIPTS.bahkruums.name, Duration = 3})
-        task.spawn(function() getgenv().NK3Y_Key = userKey; pcall(function() loadstring(game:HttpGet(SCRIPTS.bahkruums.url))() end); createBoomboxTab(Window) end)
+        task.spawn(function() 
+            getgenv().NK3Y_Key = userKey
+            local ok, err = pcall(function() loadstring(game:HttpGet(SCRIPTS.bahkruums.url))() end)
+            if not ok then warn("[NK3Y HUB] Ошибка Bahkruums: " .. tostring(err)) end
+        end)
+    end})
+
+    -- ===== АВТО-ЗАПУСК =====
+    MainTab:CreateSection("Авто-запуск")
+    MainTab:CreateToggle({Name = "Авто-запуск по плейсу", CurrentValue = autoExecEnabled, Callback = function(val) 
+        autoExecEnabled = val
+        if val then checkAutoExecute(userKey) end 
     end})
 
     -- ===== ЗВУКИ =====
@@ -308,22 +297,21 @@ local function showHubMenu(userKey, userData)
     SoundTab:CreateInput({Name = "ID звука прыжка", CurrentValue = KB_DEFAULT_JUMP, PlaceholderText = "rbxassetid://...", RemoveTextAfterFocusLost = false, Callback = function(t) KB.jumpSound = t end})
     SoundTab:CreateInput({Name = "ID звука приземления", CurrentValue = KB_DEFAULT_LAND, PlaceholderText = "rbxassetid://...", RemoveTextAfterFocusLost = false, Callback = function(t) KB.landSound = t end})
 
-    -- ===== ИНФО И КЛЮЧ =====
+    -- ===== ИНФО =====
     InfoTab:CreateSection("Информация")
     InfoTab:CreateButton({Name = "Твой статус: " .. (isOwner and "Владелец" or "Пользователь"), Callback = function() end})
-    InfoTab:CreateButton({Name = "Твой ключ: " .. string.sub(tostring(userKey), 1, 8) .. "***", Callback = function() end})
-    InfoTab:CreateButton({
-        Name = "Узнать время ключа",
-        Callback = function()
-            Rayfield:Notify({Title = "Запрос", Content = "Читаем keys.json...", Duration = 2})
-            task.spawn(function()
-                local info = fetchKeyInfo(userKey)
-                Rayfield:Notify({Title = "Инфо о ключе", Content = info, Duration = 5})
-            end)
-        end
-    })
+    InfoTab:CreateButton({Name = "Узнать время ключа", Callback = function()
+        Rayfield:Notify({Title = "Запрос", Content = "Читаем keys.json...", Duration = 2})
+        task.spawn(function()
+            local info = fetchKeyInfo(userKey)
+            Rayfield:Notify({Title = "Инфо о ключе", Content = info, Duration = 5})
+        end)
+    end})
     InfoTab:CreateButton({Name = "Скопировать мой ключ", Callback = function() if setclipboard then setclipboard(userKey); Rayfield:Notify({Title = "Успех", Content = "Скопировано", Duration = 3}) end end})
     InfoTab:CreateButton({Name = "Сбросить ключ", Callback = function() if delfile and isfile(KEY_FILE) then pcall(function() delfile(KEY_FILE) end); Rayfield:Notify({Title = "Сброс", Content = "Ключ удален", Duration = 5}) end end})
+
+    -- Авто-запуск при открытии меню
+    if autoExecEnabled then checkAutoExecute(userKey) end
 end
 
 -- ============================================================
